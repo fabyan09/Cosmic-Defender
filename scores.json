@@ -1,0 +1,32 @@
+[
+  {
+    "name": "CHAMPION",
+    "score": 2500,
+    "wave": 10,
+    "date": "2025-01-15 14:30"
+  },
+  {
+    "name": "ACE",
+    "score": 1800,
+    "wave": 8,
+    "date": "2025-01-14 16:45"
+  },
+  {
+    "name": "Fabrice",
+    "score": 1295,
+    "wave": 8,
+    "date": "2025-09-29 16:56"
+  },
+  {
+    "name": "ROOKIE",
+    "score": 950,
+    "wave": 5,
+    "date": "2025-01-13 12:20"
+  },
+  {
+    "name": "fabrice",
+    "score": 580,
+    "wave": 5,
+    "date": "2025-09-29 17:40"
+  }
+]
