@@ -4,18 +4,19 @@ Un jeu de tir spatial épique développé en Python avec Pygame !
 
 ## 🎮 Comment jouer
 
-### Objectif
-Défendez la Terre contre les vagues d'envahisseurs cosmiques ! Survivez à 10 vagues pour remporter la victoire.
+### Modes de jeu
+- **🎯 Mode Campagne** : Survivez à 10 vagues pour remporter la victoire
+- **♾️ Mode Infini** : Affrontez des vagues infinies avec des Giga Boss toutes les 10 vagues !
 
 ### Contrôles
 - **Déplacement** : WASD ou flèches directionnelles
 - **Tir** : Barre d'espace ou clic souris
-- **Menu** : Appuyez sur SPACE pour commencer
+- **Menu interactif** : Cliquez sur les boutons ou utilisez les raccourcis
 - **Plein écran** : F11 (ESC pour sortir du plein écran)
-- **Leaderboard** : L depuis le menu principal
+- **Configuration GitHub** : Bouton "GITHUB SETUP" dans le menu
 - **Sauvegarder score** : S après game over/victoire
 - **Redémarrer** : R après un game over
-- **Retour au menu** : ESC après un game over
+- **Retour au menu** : ESC dans tous les écrans
 
 ### Éléments de jeu
 
@@ -29,6 +30,7 @@ Défendez la Terre contre les vagues d'envahisseurs cosmiques ! Survivez à 10 v
 - **Rapides** (Rouge clair) : Plus rapides mais fragiles - 15 points
 - **Blindés** (Rouge foncé) : Plus résistants et lents - 25 points
 - **Boss** (Violet) : Très résistants avec patterns d'attaque - 100 points
+- **🏰 Giga Boss** (Mode Infini) : Boss géants avec 4 patterns d'attaque et barre de vie - 500+ points
 
 #### ⚡ Power-ups
 - **🔶 Tir Rapide (Orange)** : Cadence de tir accélérée
@@ -43,10 +45,11 @@ Défendez la Terre contre les vagues d'envahisseurs cosmiques ! Survivez à 10 v
 - **Durée des power-ups** : 5 secondes d'effet
 
 ### 🏆 Système de scores
-- **Sauvegarde automatique** : Les scores sont sauvés dans `scores.json`
-- **Leaderboard** : Top 10 des meilleurs scores avec nom, score, vague et date
-- **Classement** : Les scores sont triés par points obtenus
-- **Navigation** : Accès facile depuis le menu principal avec la touche L
+- **Sauvegarde locale** : Les scores sont sauvés dans `scores.json`
+- **Leaderboard unifié** : Affiche les scores des modes Campagne et Infini
+- **🌐 Leaderboard web** : Site web avec vos scores en temps réel
+- **📤 Upload automatique** : Synchronisation automatique vers GitHub Pages
+- **Filtrage par mode** : Visualisez séparément les scores par mode de jeu
 
 ## 🚀 Lancement du jeu
 
@@ -83,19 +86,21 @@ Jeu random/
 - **Python 3.11**
 - **Pygame 2.5.2** - Moteur de jeu 2D
 - **NumPy 1.24.3** - Calculs mathématiques
+- **Requests 2.32+** - API GitHub pour upload automatique
 - **PyInstaller 6.1.0** - Compilation en exécutable
 
 ## 🎯 Caractéristiques du jeu
 
-- **Physique fluide** : Mouvement à 60 FPS
-- **Effets visuels** : Particules d'explosion et animations
-- **Interface intuitive** : Barres de santé/bouclier, score en temps réel
-- **Gameplay équilibré** : Difficulté progressive et power-ups stratégiques
-- **Système de vagues** : 10 niveaux de difficulté croissante
-- **Types d'ennemis variés** : 4 types avec comportements uniques
-- **Mode plein écran** : Support F11 pour jeu immersif
-- **Système de scores** : Sauvegarde et leaderboard des meilleurs scores
-- **Interface de saisie** : Entrez votre nom pour sauvegarder vos exploits
+- **🎮 Deux modes de jeu** : Campagne (10 vagues) et Infini (sans fin)
+- **🤖 Menu interactif** : Boutons cliquables responsive à toutes résolutions
+- **🏰 Giga Boss** : Boss épiques avec patterns d'attaque complexes (mode infini)
+- **🌐 Leaderboard web** : Site web automatiquement mis à jour
+- **📤 Upload automatique** : Synchronisation GitHub en temps réel
+- **🖥️ Responsive design** : Compatible fullscreen et toutes résolutions
+- **🎨 Effets visuels** : Particules d'explosion et animations
+- **⚖️ Gameplay équilibré** : Difficulté progressive et power-ups stratégiques
+- **👾 Ennemis variés** : 5 types avec comportements uniques + Giga Boss
+- **🎯 Interface intuitive** : Barres de santé/bouclier, score en temps réel
 
 ## 🏆 Conseils de pro
 
@@ -106,3 +111,39 @@ Jeu random/
 5. **Gérez vos power-ups** - ne les gaspillez pas !
 
 Bon voyage dans l'espace, Commandant ! 🌌
+
+## 🆕 Nouvelles fonctionnalités (v2.0)
+
+### 🌐 Leaderboard Web
+- **Site automatique** : Votre leaderboard en ligne sur GitHub Pages
+- **Design spatial** : Interface immersive avec animations d'étoiles
+- **Filtres intelligents** : Affichage par mode de jeu (Campagne/Infini/Tous)
+- **Statistiques** : Nombre de joueurs, meilleur score, vague maximum
+- **Responsive** : Fonctionne parfaitement sur mobile et desktop
+
+### 📤 Upload Automatique GitHub
+- **Configuration simple** : Interface intégrée dans le jeu
+- **Synchronisation instantanée** : Scores uploadés automatiquement
+- **Sécurisé** : Token GitHub avec permissions limitées
+- **Mode offline** : Fonctionne même sans internet (sync plus tard)
+
+### 🎮 Mode Infini
+- **Vagues sans fin** : Défi ultime pour les meilleurs pilotes
+- **Giga Boss toutes les 10 vagues** : Combats épiques avec patterns complexes
+- **Difficulté progressive** : Plus d'ennemis et spawn plus rapide
+- **Scores séparés** : Leaderboard dédié au mode infini
+
+### 🤖 Interface Moderne
+- **Menu interactif** : Boutons cliquables responsive
+- **Configuration GitHub** : Interface complète dans le jeu
+- **Fullscreen amélioré** : Adaptation parfaite à toutes les résolutions
+- **Feedback visuel** : Effets hover et animations
+
+## 📁 Guides disponibles
+
+- **`GUIDE_LEADERBOARD.md`** : Déployer votre site leaderboard
+- **`GUIDE_AUTO_UPLOAD.md`** : Configurer l'upload automatique
+- **`deploy_leaderboard.py`** : Script de déploiement automatique
+- **`test_github_upload.py`** : Tester votre configuration GitHub
+
+**🚀 Explorez l'univers infini de Cosmic Defender !**

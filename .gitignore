@@ -1,0 +1,53 @@
+# Fichiers de scores et configuration locale
+scores.json
+web_scores.json
+player_id.txt
+github_config.json
+
+# Script d'encodage (sécurité)
+encode_token.py
+config_token.py
+
+# Fichiers Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Environnements virtuels
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

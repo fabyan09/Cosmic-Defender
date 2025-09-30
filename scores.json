@@ -18,10 +18,24 @@
     "date": "2025-09-30 11:10"
   },
   {
+    "name": "fab",
+    "score": 1925,
+    "wave": 10,
+    "mode": "infinite",
+    "date": "2025-09-30 12:25"
+  },
+  {
     "name": "ACE",
     "score": 1800,
     "wave": 8,
     "date": "2025-01-14 16:45"
+  },
+  {
+    "name": "fab",
+    "score": 1465,
+    "wave": 10,
+    "mode": "infinite",
+    "date": "2025-09-30 11:27"
   },
   {
     "name": "Fabrice",

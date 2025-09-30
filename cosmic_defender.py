@@ -4,8 +4,18 @@ import math
 import sys
 import json
 import os
+import uuid
+import base64
+import threading
 from datetime import datetime
 from enum import Enum
+
+# Optional import for web features
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
 
 pygame.init()
 
@@ -26,16 +36,49 @@ PURPLE = (128, 0, 128)
 class GameState(Enum):
     MENU = 1
     PLAYING = 2
-    GAME_OVER = 3
-    VICTORY = 4
-    LEADERBOARD = 5
-    ENTER_NAME = 6
+    PLAYING_INFINITE = 3
+    GAME_OVER = 4
+    VICTORY = 5
+    LEADERBOARD = 6
+    ENTER_NAME = 7
+    GITHUB_CONFIG = 8
 
 class PowerUpType(Enum):
     RAPID_FIRE = 1
     SHIELD = 2
     MULTI_SHOT = 3
     LASER = 4
+
+class Button:
+    def __init__(self, x, y, width, height, text, font, color=WHITE, bg_color=None, hover_color=CYAN):
+        self.rect = pygame.Rect(x - width//2, y - height//2, width, height)
+        self.text = text
+        self.font = font
+        self.color = color
+        self.bg_color = bg_color
+        self.hover_color = hover_color
+        self.is_hovered = False
+        self.is_clicked = False
+
+    def update(self, mouse_pos, mouse_clicked):
+        self.is_hovered = self.rect.collidepoint(mouse_pos)
+        self.is_clicked = self.is_hovered and mouse_clicked
+        return self.is_clicked
+
+    def draw(self, screen):
+        # Draw background if specified
+        if self.bg_color:
+            pygame.draw.rect(screen, self.bg_color, self.rect)
+
+        # Draw border
+        border_color = self.hover_color if self.is_hovered else self.color
+        pygame.draw.rect(screen, border_color, self.rect, 3)
+
+        # Draw text
+        text_color = self.hover_color if self.is_hovered else self.color
+        text_surface = self.font.render(self.text, True, text_color)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        screen.blit(text_surface, text_rect)
 
 class Particle:
     def __init__(self, x, y, color, velocity, lifetime):
@@ -284,6 +327,248 @@ class Player:
         pygame.draw.polygon(screen, color, points)
         pygame.draw.polygon(screen, WHITE, points, 2)
 
+class GigaBoss:
+    def __init__(self, x, y, wave):
+        self.x = x
+        self.y = y
+        self.wave = wave
+        self.health = 50 + (wave // 10) * 25  # Health increases with waves
+        self.max_health = self.health
+        self.speed = 20
+        self.size = 80
+        self.color = (150, 0, 150)
+        self.shoot_timer = 0
+        self.pattern_timer = 0
+        self.current_pattern = 0
+        self.pattern_duration = 3.0
+        self.points = 500 + (wave // 10) * 100
+        self.rect = pygame.Rect(x-self.size//2, y-self.size//2, self.size, self.size)
+
+        # Movement pattern
+        self.center_x = x
+        self.movement_timer = 0
+        self.direction = 1
+
+    def update(self, dt, player_x, player_y, screen_width, screen_height):
+        # Movement pattern - side to side
+        self.movement_timer += dt
+        self.x = self.center_x + math.sin(self.movement_timer * 0.5) * 200
+        self.x = max(self.size, min(screen_width - self.size, self.x))
+
+        # Slowly move down
+        self.y += self.speed * dt * 0.3
+
+        self.rect.center = (int(self.x), int(self.y))
+
+        # Pattern timing
+        self.pattern_timer += dt
+        if self.pattern_timer >= self.pattern_duration:
+            self.pattern_timer = 0
+            self.current_pattern = (self.current_pattern + 1) % 4
+
+        self.shoot_timer += dt
+        return self.y < screen_height + 100
+
+    def get_bullets(self, player_x, player_y):
+        bullets = []
+        if self.shoot_timer < 0.1:  # High fire rate
+            return bullets
+
+        self.shoot_timer = 0
+
+        if self.current_pattern == 0:  # Spray pattern
+            for i in range(-2, 3):
+                angle = math.atan2(player_y - self.y, player_x - self.x) + i * 0.3
+                velocity = (math.cos(angle) * 300, math.sin(angle) * 300)
+                bullets.append(Bullet(self.x, self.y + 30, velocity, color=PURPLE))
+
+        elif self.current_pattern == 1:  # Circle pattern
+            for i in range(8):
+                angle = (i / 8) * 2 * math.pi + self.pattern_timer
+                velocity = (math.cos(angle) * 200, math.sin(angle) * 200)
+                bullets.append(Bullet(self.x, self.y + 30, velocity, color=RED))
+
+        elif self.current_pattern == 2:  # Aimed burst
+            for _ in range(3):
+                angle = math.atan2(player_y - self.y, player_x - self.x) + random.uniform(-0.2, 0.2)
+                velocity = (math.cos(angle) * 400, math.sin(angle) * 400)
+                bullets.append(Bullet(self.x, self.y + 30, velocity, color=ORANGE))
+
+        else:  # Laser-like vertical shots
+            for i in range(-1, 2):
+                velocity = (i * 100, 350)
+                bullets.append(Bullet(self.x + i * 50, self.y + 30, velocity, color=YELLOW))
+
+        return bullets
+
+    def take_damage(self, damage):
+        self.health -= damage
+        return self.health <= 0
+
+    def draw(self, screen):
+        # Health bar
+        bar_width = self.size * 2
+        bar_height = 8
+        bar_x = self.x - bar_width // 2
+        bar_y = self.y - self.size // 2 - 20
+
+        health_ratio = self.health / self.max_health
+        pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+        pygame.draw.rect(screen, GREEN, (bar_x, bar_y, bar_width * health_ratio, bar_height))
+        pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
+
+        # Boss body
+        current_color = tuple(int(c * (0.5 + health_ratio * 0.5)) for c in self.color)
+
+        # Main body
+        pygame.draw.ellipse(screen, current_color, self.rect)
+        pygame.draw.ellipse(screen, WHITE, self.rect, 4)
+
+        # Add spikes/details
+        for i in range(8):
+            angle = (i / 8) * 2 * math.pi + self.pattern_timer
+            spike_x = self.x + math.cos(angle) * (self.size // 2 - 10)
+            spike_y = self.y + math.sin(angle) * (self.size // 2 - 10)
+            pygame.draw.circle(screen, YELLOW, (int(spike_x), int(spike_y)), 5)
+
+        # Eyes
+        eye_offset = 15
+        pygame.draw.circle(screen, RED, (int(self.x - eye_offset), int(self.y - 10)), 8)
+        pygame.draw.circle(screen, RED, (int(self.x + eye_offset), int(self.y - 10)), 8)
+
+class GitHubUploader:
+    def __init__(self):
+        # Configuration centralisée - tous les joueurs uploadent vers le même leaderboard
+        self.config = {
+            "username": "fabyan09",
+            "repository": "cosmic-defender-leaderboard",
+            "token": self._get_encoded_token(),
+            "auto_upload": True,
+            "configured": True
+        }
+
+    def _get_encoded_token(self):
+        """Récupère le token encodé depuis le fichier de configuration"""
+        try:
+            # Essayer d'importer le token depuis le fichier de configuration
+            from config_token import ENCODED_TOKEN
+            if ENCODED_TOKEN and ENCODED_TOKEN != "REMPLACEZ_PAR_VOTRE_TOKEN_ENCODE":
+                return base64.b64decode(ENCODED_TOKEN.encode()).decode()
+        except ImportError:
+            print("Fichier config_token.py non trouve")
+        except Exception as e:
+            print(f"Erreur lors du decodage du token: {e}")
+
+        # Token de fallback (désactivé par défaut)
+        return ""
+
+    def is_configured(self):
+        """Check if GitHub integration is properly configured"""
+        return (self.config.get("configured", False) and
+                self.config.get("token", "") and
+                self.config.get("username", "") and
+                self.config.get("repository", "") and
+                HAS_REQUESTS)
+
+    def test_connection(self):
+        """Test GitHub API connection"""
+        if not HAS_REQUESTS or not self.config.get("token"):
+            return False, "Requests module or token missing"
+
+        try:
+            headers = {
+                "Authorization": f"token {self.config['token']}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+
+            url = f"https://api.github.com/repos/{self.config['username']}/{self.config['repository']}"
+            response = requests.get(url, headers=headers, timeout=10)
+
+            if response.status_code == 200:
+                return True, "Connection successful"
+            elif response.status_code == 404:
+                return False, "Repository not found"
+            elif response.status_code == 401:
+                return False, "Invalid token"
+            else:
+                return False, f"HTTP {response.status_code}"
+
+        except requests.exceptions.Timeout:
+            return False, "Connection timeout"
+        except requests.exceptions.ConnectionError:
+            return False, "No internet connection"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+
+    def upload_leaderboard(self, leaderboard_data):
+        """Upload leaderboard data to GitHub repository"""
+        if not self.is_configured() or not self.config.get("auto_upload", False):
+            return False, "Not configured or auto-upload disabled"
+
+        try:
+            # Convert data to JSON string
+            json_content = json.dumps(leaderboard_data, ensure_ascii=False, indent=2)
+
+            # Encode to base64 (required by GitHub API)
+            content_encoded = base64.b64encode(json_content.encode('utf-8')).decode('utf-8')
+
+            headers = {
+                "Authorization": f"token {self.config['token']}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+
+            # First, try to get the current file to get its SHA
+            file_url = f"https://api.github.com/repos/{self.config['username']}/{self.config['repository']}/contents/cosmic_defender_leaderboard.json"
+
+            sha = None
+            try:
+                get_response = requests.get(file_url, headers=headers, timeout=10)
+                if get_response.status_code == 200:
+                    sha = get_response.json().get('sha')
+            except:
+                pass  # File doesn't exist yet, that's ok
+
+            # Prepare the update payload
+            payload = {
+                "message": f"Update leaderboard - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "content": content_encoded,
+                "committer": {
+                    "name": "Cosmic Defender",
+                    "email": "cosmic-defender@game.local"
+                }
+            }
+
+            if sha:
+                payload["sha"] = sha
+
+            # Upload the file
+            response = requests.put(file_url, headers=headers, json=payload, timeout=30)
+
+            if response.status_code in [200, 201]:
+                return True, "Upload successful"
+            else:
+                return False, f"Upload failed: HTTP {response.status_code}"
+
+        except requests.exceptions.Timeout:
+            return False, "Upload timeout"
+        except requests.exceptions.ConnectionError:
+            return False, "No internet connection"
+        except Exception as e:
+            return False, f"Upload error: {str(e)}"
+
+    def upload_async(self, leaderboard_data):
+        """Upload leaderboard data asynchronously"""
+        def upload_thread():
+            success, message = self.upload_leaderboard(leaderboard_data)
+            if success:
+                print("✓ Leaderboard uploaded to GitHub successfully!")
+            else:
+                print(f"✗ GitHub upload failed: {message}")
+
+        if self.is_configured() and self.config.get("auto_upload", False):
+            thread = threading.Thread(target=upload_thread, daemon=True)
+            thread.start()
+
 class CosmicDefender:
     def __init__(self):
         self.fullscreen = False
@@ -297,10 +582,12 @@ class CosmicDefender:
         self.current_height = SCREEN_HEIGHT
 
         self.state = GameState.MENU
+        self.game_mode = "normal"  # "normal" or "infinite"
         self.player = Player(self.current_width // 2, self.current_height - 100, self.current_width, self.current_height)
         self.bullets = []
         self.enemy_bullets = []
         self.enemies = []
+        self.giga_boss = None
         self.power_ups = []
         self.particles = []
 
@@ -317,9 +604,38 @@ class CosmicDefender:
 
         # Score system
         self.scores_file = "scores.json"
+        self.web_scores_file = "web_scores.json"
         self.player_name = ""
         self.name_input_active = False
         self.cursor_timer = 0
+
+        # Generate unique player ID for web leaderboard
+        self.player_id = self.get_or_create_player_id()
+
+        # GitHub integration (before menu buttons)
+        self.github_uploader = GitHubUploader() if HAS_REQUESTS else None
+
+        # Menu buttons (after GitHub uploader is initialized)
+        self.menu_buttons = []
+        self.create_menu_buttons()
+
+    def create_menu_buttons(self):
+        button_width = 300
+        button_height = 50
+        center_x = self.current_width // 2
+        start_y = self.current_height // 2 - 50
+
+        # Status de l'upload automatique
+        upload_status = ""
+        if self.github_uploader and self.github_uploader.is_configured():
+            upload_status = " (Auto-Upload ✓)"
+
+        self.menu_buttons = [
+            Button(center_x, start_y - 60, button_width, button_height, "CAMPAIGN MODE", self.font),
+            Button(center_x, start_y, button_width, button_height, "INFINITE MODE", self.font),
+            Button(center_x, start_y + 60, button_width, button_height, f"LEADERBOARD{upload_status}", self.font),
+            Button(center_x, start_y + 120, button_width, button_height, "QUIT", self.font)
+        ]
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
@@ -337,6 +653,9 @@ class CosmicDefender:
         if hasattr(self, 'player') and self.player:
             self.player.update_screen_bounds(self.current_width, self.current_height)
 
+        # Recreate menu buttons for new screen size
+        self.create_menu_buttons()
+
     def load_scores(self):
         try:
             if os.path.exists(self.scores_file):
@@ -346,17 +665,18 @@ class CosmicDefender:
             pass
         return []
 
-    def save_score(self, name, score, wave):
+    def save_score(self, name, score, wave, mode="normal"):
         scores = self.load_scores()
         new_score = {
             "name": name,
             "score": score,
             "wave": wave,
+            "mode": mode,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
         scores.append(new_score)
         scores.sort(key=lambda x: x["score"], reverse=True)
-        scores = scores[:10]  # Keep only top 10
+        scores = scores[:20]  # Keep top 20 to accommodate both modes
 
         try:
             with open(self.scores_file, 'w', encoding='utf-8') as f:
@@ -366,6 +686,81 @@ class CosmicDefender:
 
     def get_top_scores(self):
         return self.load_scores()[:10]
+
+    def get_or_create_player_id(self):
+        id_file = "player_id.txt"
+        try:
+            if os.path.exists(id_file):
+                with open(id_file, 'r') as f:
+                    return f.read().strip()
+            else:
+                player_id = str(uuid.uuid4())
+                with open(id_file, 'w') as f:
+                    f.write(player_id)
+                return player_id
+        except:
+            return str(uuid.uuid4())
+
+    def save_web_score(self, name, score, wave, mode):
+        """Save score in web-compatible format"""
+        web_score = {
+            "player_id": self.player_id,
+            "name": name,
+            "score": score,
+            "wave": wave,
+            "mode": mode,
+            "timestamp": datetime.now().isoformat(),
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+        }
+
+        # Load existing web scores
+        web_scores = []
+        try:
+            if os.path.exists(self.web_scores_file):
+                with open(self.web_scores_file, 'r', encoding='utf-8') as f:
+                    web_scores = json.load(f)
+        except:
+            pass
+
+        web_scores.append(web_score)
+        web_scores.sort(key=lambda x: x["score"], reverse=True)
+
+        # Save updated web scores
+        try:
+            with open(self.web_scores_file, 'w', encoding='utf-8') as f:
+                json.dump(web_scores, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving web scores: {e}")
+
+        return web_score
+
+    def export_for_github(self):
+        """Export scores in format ready for GitHub Pages"""
+        try:
+            if os.path.exists(self.web_scores_file):
+                with open(self.web_scores_file, 'r', encoding='utf-8') as f:
+                    scores = json.load(f)
+
+                # Create a more web-friendly format
+                export_data = {
+                    "last_updated": datetime.now().isoformat(),
+                    "total_scores": len(scores),
+                    "scores": scores[:50]  # Top 50 scores
+                }
+
+                with open("cosmic_defender_leaderboard.json", 'w', encoding='utf-8') as f:
+                    json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+                print("Scores exported to cosmic_defender_leaderboard.json")
+
+                # Auto-upload to GitHub if configured
+                if self.github_uploader and self.github_uploader.is_configured():
+                    self.github_uploader.upload_async(export_data)
+
+                return export_data
+        except Exception as e:
+            print(f"Error exporting scores: {e}")
+            return None
 
     def spawn_enemy(self):
         x = random.randint(50, self.current_width - 50)
@@ -383,6 +778,11 @@ class CosmicDefender:
 
         self.enemies.append(Enemy(x, y, enemy_type))
 
+    def spawn_giga_boss(self):
+        x = self.current_width // 2
+        y = -100
+        self.giga_boss = GigaBoss(x, y, self.wave)
+
     def spawn_power_up(self, x, y):
         if random.random() < 0.3:
             power_type = random.choice(list(PowerUpType))
@@ -394,6 +794,9 @@ class CosmicDefender:
             self.particles.append(Particle(x, y, color, velocity, random.uniform(0.5, 1.5)))
 
     def handle_events(self):
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = False
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -405,6 +808,9 @@ class CosmicDefender:
                 # Update player bounds
                 if hasattr(self, 'player') and self.player:
                     self.player.update_screen_bounds(self.current_width, self.current_height)
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    mouse_clicked = True
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     self.toggle_fullscreen()
@@ -412,7 +818,7 @@ class CosmicDefender:
                     self.toggle_fullscreen()
                 elif self.state == GameState.MENU:
                     if event.key == pygame.K_SPACE:
-                        self.start_game()
+                        self.start_game("normal")
                     elif event.key == pygame.K_l:  # L for Leaderboard
                         self.state = GameState.LEADERBOARD
                 elif self.state == GameState.LEADERBOARD:
@@ -420,7 +826,9 @@ class CosmicDefender:
                         self.state = GameState.MENU
                 elif self.state == GameState.ENTER_NAME:
                     if event.key == pygame.K_RETURN and len(self.player_name.strip()) > 0:
-                        self.save_score(self.player_name.strip(), self.score, self.wave)
+                        self.save_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
+                        self.save_web_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
+                        self.export_for_github()
                         self.player_name = ""
                         self.name_input_active = False
                         self.state = GameState.LEADERBOARD
@@ -438,22 +846,126 @@ class CosmicDefender:
                         self.name_input_active = True
                         self.state = GameState.ENTER_NAME
                     elif event.key == pygame.K_r:
-                        self.start_game()
+                        self.start_game("normal")
                     elif event.key == pygame.K_ESCAPE:
                         self.state = GameState.MENU
 
-    def start_game(self):
-        self.state = GameState.PLAYING
+        # Handle menu button clicks
+        if self.state == GameState.MENU:
+            for i, button in enumerate(self.menu_buttons):
+                button.update(mouse_pos, mouse_clicked)
+                if button.is_clicked:
+                    if i == 0:  # Campaign Mode
+                        self.start_game("normal")
+                    elif i == 1:  # Infinite Mode
+                        self.start_game("infinite")
+                    elif i == 2:  # Leaderboard
+                        self.state = GameState.LEADERBOARD
+                    elif i == 3:  # Quit
+                        self.running = False
+        else:
+            # Update button hover states even if not clicked
+            for button in self.menu_buttons:
+                button.update(mouse_pos, False)
+
+    def handle_github_config_input(self, event):
+        """Handle input in GitHub configuration screen"""
+        if not self.github_uploader:
+            return
+
+        if event.key == pygame.K_ESCAPE:
+            self.state = GameState.MENU
+            self.create_menu_buttons()  # Refresh menu buttons
+        elif event.key == pygame.K_TAB:
+            # Switch between fields
+            fields = ["username", "repository", "token"]
+            current_index = fields.index(self.github_current_field)
+            self.github_current_field = fields[(current_index + 1) % len(fields)]
+            # Load current value into input field
+            self.github_input_field = self.github_uploader.config.get(self.github_current_field, "")
+        elif event.key == pygame.K_RETURN:
+            # Save current field and move to next
+            self.github_uploader.config[self.github_current_field] = self.github_input_field
+            fields = ["username", "repository", "token"]
+            current_index = fields.index(self.github_current_field)
+            if current_index < len(fields) - 1:
+                self.github_current_field = fields[current_index + 1]
+                self.github_input_field = self.github_uploader.config.get(self.github_current_field, "")
+        elif event.key == pygame.K_BACKSPACE:
+            self.github_input_field = self.github_input_field[:-1]
+        elif event.key == pygame.K_t:
+            # Test connection
+            self.test_github_connection()
+        elif event.key == pygame.K_s:
+            # Save configuration
+            self.save_github_config()
+        elif event.key == pygame.K_a:
+            # Toggle auto-upload
+            current_auto = self.github_uploader.config.get("auto_upload", False)
+            self.github_uploader.config["auto_upload"] = not current_auto
+        elif event.unicode.isprintable() and len(self.github_input_field) < 50:
+            self.github_input_field += event.unicode
+
+    def test_github_connection(self):
+        """Test GitHub connection"""
+        if not self.github_uploader:
+            self.github_test_result = "GitHub uploader not available"
+            return
+
+        # Save current input
+        self.github_uploader.config[self.github_current_field] = self.github_input_field
+
+        # Test connection
+        success, message = self.github_uploader.test_connection()
+        self.github_test_result = message
+
+    def save_github_config(self):
+        """Save GitHub configuration"""
+        if not self.github_uploader:
+            return
+
+        # Save current input
+        self.github_uploader.config[self.github_current_field] = self.github_input_field
+
+        # Mark as configured if all required fields are filled
+        if (self.github_uploader.config.get("username") and
+            self.github_uploader.config.get("repository") and
+            self.github_uploader.config.get("token")):
+            self.github_uploader.config["configured"] = True
+        else:
+            self.github_uploader.config["configured"] = False
+
+        # Save to file
+        self.github_uploader.save_config()
+        self.github_test_result = "Configuration sauvegardée!"
+
+        # Refresh menu buttons to show new status
+        self.create_menu_buttons()
+
+    def start_game(self, mode="normal"):
+        self.game_mode = mode
+        if mode == "infinite":
+            self.state = GameState.PLAYING_INFINITE
+        else:
+            self.state = GameState.PLAYING
+
         self.player = Player(self.current_width // 2, self.current_height - 100, self.current_width, self.current_height)
         self.bullets.clear()
         self.enemy_bullets.clear()
         self.enemies.clear()
+        self.giga_boss = None
         self.power_ups.clear()
         self.particles.clear()
         self.score = 0
         self.wave = 1
         self.enemies_spawned = 0
         self.spawn_timer = 0
+
+        # Set initial values based on mode
+        if mode == "infinite":
+            self.enemies_per_wave = 5  # Start with fewer enemies in infinite mode
+        else:
+            self.enemies_per_wave = 10
 
     def update_game(self, dt):
         self.player.update(dt)
@@ -465,6 +977,7 @@ class CosmicDefender:
         self.bullets = [bullet for bullet in self.bullets if bullet.update(dt, self.current_width, self.current_height)]
         self.enemy_bullets = [bullet for bullet in self.enemy_bullets if bullet.update(dt, self.current_width, self.current_height)]
 
+        # Update regular enemies
         for enemy in self.enemies[:]:
             if not enemy.update(dt, self.player.x, self.player.y, self.current_height):
                 self.enemies.remove(enemy)
@@ -477,10 +990,22 @@ class CosmicDefender:
                     velocity = (math.cos(angle) * 200, math.sin(angle) * 200)
                     self.enemy_bullets.append(Bullet(enemy.x, enemy.y, velocity, color=RED))
 
+        # Update giga boss
+        if self.giga_boss:
+            if not self.giga_boss.update(dt, self.player.x, self.player.y, self.current_width, self.current_height):
+                self.giga_boss = None
+            else:
+                # Giga boss shooting
+                giga_bullets = self.giga_boss.get_bullets(self.player.x, self.player.y)
+                self.enemy_bullets.extend(giga_bullets)
+
         self.power_ups = [power_up for power_up in self.power_ups if power_up.update(dt, self.current_height)]
         self.particles = [particle for particle in self.particles if particle.update(dt)]
 
+        # Bullet vs enemies collision
         for bullet in self.bullets[:]:
+            hit = False
+            # Check collision with regular enemies
             for enemy in self.enemies[:]:
                 if bullet.rect.colliderect(enemy.rect):
                     if enemy.take_damage(bullet.damage):
@@ -489,7 +1014,17 @@ class CosmicDefender:
                         self.spawn_power_up(enemy.x, enemy.y)
                         self.enemies.remove(enemy)
                     self.bullets.remove(bullet)
+                    hit = True
                     break
+
+            # Check collision with giga boss
+            if not hit and self.giga_boss and bullet.rect.colliderect(self.giga_boss.rect):
+                if self.giga_boss.take_damage(bullet.damage):
+                    self.score += self.giga_boss.points
+                    self.create_explosion(self.giga_boss.x, self.giga_boss.y, PURPLE, 20)
+                    self.spawn_power_up(self.giga_boss.x, self.giga_boss.y)
+                    self.giga_boss = None
+                self.bullets.remove(bullet)
 
         for bullet in self.enemy_bullets[:]:
             if bullet.rect.colliderect(self.player.rect):
@@ -504,6 +1039,7 @@ class CosmicDefender:
                 self.power_ups.remove(power_up)
                 self.create_explosion(power_up.x, power_up.y, power_up.color, 5)
 
+        # Player collision with enemies
         for enemy in self.enemies[:]:
             if enemy.rect.colliderect(self.player.rect):
                 if self.player.take_damage(10):
@@ -511,22 +1047,50 @@ class CosmicDefender:
                 self.create_explosion(self.player.x, self.player.y, RED)
                 self.enemies.remove(enemy)
 
-        self.spawn_timer += dt
-        if (self.spawn_timer >= self.spawn_cooldown and
-            self.enemies_spawned < self.enemies_per_wave and
-            len(self.enemies) < 15):
-            self.spawn_enemy()
-            self.enemies_spawned += 1
-            self.spawn_timer = 0
+        # Player collision with giga boss
+        if self.giga_boss and self.giga_boss.rect.colliderect(self.player.rect):
+            if self.player.take_damage(20):
+                self.state = GameState.GAME_OVER
+            self.create_explosion(self.player.x, self.player.y, RED)
 
-        if self.enemies_spawned >= self.enemies_per_wave and len(self.enemies) == 0:
-            self.wave += 1
-            self.enemies_spawned = 0
-            self.enemies_per_wave += 2
-            self.spawn_cooldown = max(0.3, self.spawn_cooldown - 0.05)
+        # Wave management
+        if self.game_mode == "infinite":
+            # In infinite mode, check for giga boss every 10 waves
+            if self.wave % 10 == 0 and not self.giga_boss and len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
+                self.spawn_giga_boss()
+            elif not self.giga_boss:  # Normal enemy spawning when no giga boss
+                self.spawn_timer += dt
+                if (self.spawn_timer >= self.spawn_cooldown and
+                    self.enemies_spawned < self.enemies_per_wave and
+                    len(self.enemies) < 15):
+                    self.spawn_enemy()
+                    self.enemies_spawned += 1
+                    self.spawn_timer = 0
 
-            if self.wave > 10:
-                self.state = GameState.VICTORY
+            # Wave progression in infinite mode
+            if self.enemies_spawned >= self.enemies_per_wave and len(self.enemies) == 0 and not self.giga_boss:
+                self.wave += 1
+                self.enemies_spawned = 0
+                self.enemies_per_wave += 1  # Gradually increase enemies
+                self.spawn_cooldown = max(0.2, self.spawn_cooldown - 0.02)
+        else:
+            # Normal campaign mode
+            self.spawn_timer += dt
+            if (self.spawn_timer >= self.spawn_cooldown and
+                self.enemies_spawned < self.enemies_per_wave and
+                len(self.enemies) < 15):
+                self.spawn_enemy()
+                self.enemies_spawned += 1
+                self.spawn_timer = 0
+
+            if self.enemies_spawned >= self.enemies_per_wave and len(self.enemies) == 0:
+                self.wave += 1
+                self.enemies_spawned = 0
+                self.enemies_per_wave += 2
+                self.spawn_cooldown = max(0.3, self.spawn_cooldown - 0.05)
+
+                if self.wave > 10:
+                    self.state = GameState.VICTORY
 
     def draw_stars(self):
         for star in self.stars:
@@ -537,11 +1101,19 @@ class CosmicDefender:
         shield_text = self.font.render(f"Shield: {self.player.shield}", True, CYAN)
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
         wave_text = self.font.render(f"Wave: {self.wave}", True, WHITE)
+        mode_text = self.font.render(f"Mode: {self.game_mode.upper()}", True, YELLOW)
 
         self.screen.blit(health_text, (10, 10))
         self.screen.blit(shield_text, (10, 50))
         self.screen.blit(score_text, (self.current_width - 150, 10))
         self.screen.blit(wave_text, (self.current_width - 150, 50))
+        self.screen.blit(mode_text, (self.current_width - 200, 90))
+
+        # Show giga boss warning
+        if self.game_mode == "infinite" and self.wave % 10 == 0 and not self.giga_boss and len(self.enemies) == 0:
+            warning_text = self.big_font.render("GIGA BOSS INCOMING!", True, RED)
+            warning_rect = warning_text.get_rect(center=(self.current_width//2, self.current_height//2))
+            self.screen.blit(warning_text, warning_rect)
 
         health_bar_width = 200
         health_ratio = self.player.health / self.player.max_health
@@ -556,36 +1128,35 @@ class CosmicDefender:
 
     def draw_menu(self):
         title = self.big_font.render("COSMIC DEFENDER", True, WHITE)
-        subtitle = self.font.render("Press SPACE to start", True, WHITE)
-        instructions = [
-            "WASD or Arrow Keys: Move",
-            "SPACE or Click: Shoot",
-            "F11: Toggle Fullscreen",
-            "L: View Leaderboard",
-            "Collect power-ups to upgrade!",
-            "Survive 10 waves to win!"
-        ]
-
-        title_rect = title.get_rect(center=(self.current_width//2, self.current_height//2 - 100))
-        subtitle_rect = subtitle.get_rect(center=(self.current_width//2, self.current_height//2 - 50))
-
+        title_rect = title.get_rect(center=(self.current_width//2, self.current_height//2 - 200))
         self.screen.blit(title, title_rect)
-        self.screen.blit(subtitle, subtitle_rect)
+
+        # Draw menu buttons
+        for button in self.menu_buttons:
+            button.draw(self.screen)
+
+        # Instructions
+        instructions = [
+            "WASD/Arrow Keys: Move | SPACE/Click: Shoot | F11: Fullscreen",
+            "Campaign Mode: Survive 10 waves to win!",
+            "Infinite Mode: Endless waves with Giga Bosses every 10 waves!"
+        ]
 
         for i, instruction in enumerate(instructions):
             text = self.font.render(instruction, True, WHITE)
-            text_rect = text.get_rect(center=(self.current_width//2, self.current_height//2 + i * 30 + 50))
+            text_rect = text.get_rect(center=(self.current_width//2, self.current_height//2 + 200 + i * 30))
             self.screen.blit(text, text_rect)
 
     def draw_game_over(self):
         game_over_text = self.big_font.render("GAME OVER", True, RED)
         score_text = self.font.render(f"Final Score: {self.score}", True, WHITE)
         wave_text = self.font.render(f"Wave Reached: {self.wave}", True, WHITE)
+        mode_text = self.font.render(f"Mode: {self.game_mode.upper()}", True, YELLOW)
         restart_text = self.font.render("Press S to save score, R to restart or ESC for menu", True, WHITE)
 
-        texts = [game_over_text, score_text, wave_text, restart_text]
+        texts = [game_over_text, score_text, wave_text, mode_text, restart_text]
         for i, text in enumerate(texts):
-            text_rect = text.get_rect(center=(self.current_width//2, self.current_height//2 - 60 + i * 40))
+            text_rect = text.get_rect(center=(self.current_width//2, self.current_height//2 - 80 + i * 40))
             self.screen.blit(text, text_rect)
 
     def draw_victory(self):
@@ -623,6 +1194,129 @@ class CosmicDefender:
         input_rect = pygame.Rect(self.current_width//2 - 150, self.current_height//2 - 15, 300, 30)
         pygame.draw.rect(self.screen, WHITE, input_rect, 2)
 
+    def init_github_config(self):
+        """Initialize GitHub configuration interface"""
+        self.github_input_field = ""
+        self.github_current_field = "username"  # username, repository, token
+        self.github_test_result = ""
+        self.github_show_password = False
+
+    def draw_github_config(self):
+        """Draw GitHub configuration screen"""
+        title = self.big_font.render("GITHUB CONFIGURATION", True, WHITE)
+        title_rect = title.get_rect(center=(self.current_width//2, 80))
+        self.screen.blit(title, title_rect)
+
+        if not HAS_REQUESTS:
+            error_text = self.font.render("Erreur: Module 'requests' requis pour GitHub", True, RED)
+            error_rect = error_text.get_rect(center=(self.current_width//2, 200))
+            self.screen.blit(error_text, error_rect)
+
+            back_text = self.font.render("Appuyez sur ESC pour retourner", True, WHITE)
+            back_rect = back_text.get_rect(center=(self.current_width//2, self.current_height - 100))
+            self.screen.blit(back_text, back_rect)
+            return
+
+        y_offset = 180
+        field_height = 60
+
+        # Instructions
+        instructions = [
+            "1. Créez un token GitHub dans Settings > Developer settings > Personal access tokens",
+            "2. Donnez les permissions 'repo' et 'contents:write'",
+            "3. Entrez vos informations ci-dessous:"
+        ]
+
+        for i, instruction in enumerate(instructions):
+            text = pygame.font.Font(None, 24).render(instruction, True, YELLOW)
+            self.screen.blit(text, (50, 120 + i * 25))
+
+        # Fields
+        fields = [
+            ("Username GitHub:", "username"),
+            ("Nom du repository:", "repository"),
+            ("Token d'accès:", "token")
+        ]
+
+        for i, (label, field_name) in enumerate(fields):
+            y = y_offset + i * field_height
+
+            # Label
+            label_text = self.font.render(label, True, WHITE)
+            self.screen.blit(label_text, (50, y))
+
+            # Input field
+            field_rect = pygame.Rect(250, y, 500, 40)
+            field_color = CYAN if self.github_current_field == field_name else WHITE
+
+            # Get field value
+            if hasattr(self.github_uploader, 'config'):
+                field_value = self.github_uploader.config.get(field_name, "")
+            else:
+                field_value = ""
+
+            # Show current input or saved value
+            if self.github_current_field == field_name:
+                display_value = self.github_input_field
+            else:
+                display_value = field_value
+
+            # Hide token with asterisks
+            if field_name == "token" and display_value and not self.github_show_password:
+                display_value = "*" * min(len(display_value), 20)
+
+            pygame.draw.rect(self.screen, field_color, field_rect, 2)
+
+            if display_value:
+                value_text = self.font.render(display_value[:40], True, WHITE)
+                self.screen.blit(value_text, (field_rect.x + 10, field_rect.y + 10))
+
+            # Current field indicator
+            if self.github_current_field == field_name:
+                cursor_x = field_rect.x + 10 + len(display_value) * 12
+                pygame.draw.line(self.screen, CYAN, (cursor_x, field_rect.y + 5), (cursor_x, field_rect.y + 35), 2)
+
+        # Buttons
+        button_y = y_offset + len(fields) * field_height + 20
+
+        # Auto-upload checkbox
+        auto_upload_enabled = self.github_uploader and self.github_uploader.config.get("auto_upload", False)
+        checkbox_color = GREEN if auto_upload_enabled else WHITE
+        checkbox_text = "☑" if auto_upload_enabled else "☐"
+
+        checkbox_surface = self.font.render(f"{checkbox_text} Upload automatique", True, checkbox_color)
+        self.screen.blit(checkbox_surface, (50, button_y))
+
+        # Test connection button
+        test_rect = pygame.Rect(50, button_y + 50, 200, 40)
+        pygame.draw.rect(self.screen, GREEN, test_rect, 2)
+        test_text = self.font.render("TESTER", True, WHITE)
+        test_text_rect = test_text.get_rect(center=test_rect.center)
+        self.screen.blit(test_text, test_text_rect)
+
+        # Save button
+        save_rect = pygame.Rect(270, button_y + 50, 200, 40)
+        pygame.draw.rect(self.screen, BLUE, save_rect, 2)
+        save_text = self.font.render("SAUVEGARDER", True, WHITE)
+        save_text_rect = save_text.get_rect(center=save_rect.center)
+        self.screen.blit(save_text, save_text_rect)
+
+        # Test result
+        if self.github_test_result:
+            result_color = GREEN if "successful" in self.github_test_result.lower() else RED
+            result_text = self.font.render(self.github_test_result, True, result_color)
+            self.screen.blit(result_text, (50, button_y + 110))
+
+        # Controls
+        controls = [
+            "TAB: Changer de champ | ENTER: Valider | ESC: Retour",
+            "T: Tester connexion | S: Sauvegarder | A: Toggle auto-upload"
+        ]
+
+        for i, control in enumerate(controls):
+            text = pygame.font.Font(None, 24).render(control, True, WHITE)
+            self.screen.blit(text, (50, self.current_height - 80 + i * 25))
+
     def draw_leaderboard(self):
         title = self.big_font.render("LEADERBOARD", True, WHITE)
         title_rect = title.get_rect(center=(self.current_width//2, 80))
@@ -634,24 +1328,25 @@ class CosmicDefender:
             no_scores_rect = no_scores.get_rect(center=(self.current_width//2, self.current_height//2))
             self.screen.blit(no_scores, no_scores_rect)
         else:
-            headers = ["#", "Name", "Score", "Wave", "Date"]
+            headers = ["#", "Name", "Score", "Wave", "Mode", "Date"]
             header_y = 140
             for i, header in enumerate(headers):
-                x_positions = [150, 300, 450, 550, 700]
+                x_positions = [100, 200, 350, 450, 530, 620]
                 header_text = self.font.render(header, True, YELLOW)
                 self.screen.blit(header_text, (x_positions[i], header_y))
 
-            for i, score_data in enumerate(scores[:10]):
-                y = header_y + 40 + i * 30
+            for i, score_data in enumerate(scores[:15]):
+                y = header_y + 40 + i * 25
                 rank = f"{i+1}"
-                name = score_data["name"][:15]  # Limit name length
+                name = score_data["name"][:12]  # Limit name length
                 score = f"{score_data['score']}"
                 wave = f"{score_data['wave']}"
+                mode = score_data.get("mode", "normal")[:8]  # Backward compatibility
                 date = score_data["date"][:10]  # Show only date part
 
-                data = [rank, name, score, wave, date]
+                data = [rank, name, score, wave, mode, date]
                 for j, text_data in enumerate(data):
-                    x_positions = [150, 300, 450, 550, 700]
+                    x_positions = [100, 200, 350, 450, 530, 620]
                     color = CYAN if i == 0 else WHITE  # Highlight first place
                     text = self.font.render(str(text_data), True, color)
                     self.screen.blit(text, (x_positions[j], y))
@@ -666,7 +1361,7 @@ class CosmicDefender:
 
             self.handle_events()
 
-            if self.state == GameState.PLAYING:
+            if self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
                 self.update_game(dt)
             elif self.state == GameState.ENTER_NAME:
                 self.cursor_timer += dt
@@ -676,7 +1371,7 @@ class CosmicDefender:
 
             if self.state == GameState.MENU:
                 self.draw_menu()
-            elif self.state == GameState.PLAYING:
+            elif self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
                 self.player.draw(self.screen)
 
                 for bullet in self.bullets:
@@ -685,6 +1380,8 @@ class CosmicDefender:
                     bullet.draw(self.screen)
                 for enemy in self.enemies:
                     enemy.draw(self.screen)
+                if self.giga_boss:
+                    self.giga_boss.draw(self.screen)
                 for power_up in self.power_ups:
                     power_up.draw(self.screen)
                 for particle in self.particles:
