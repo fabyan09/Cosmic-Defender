@@ -604,6 +604,22 @@ class CosmicDefender:
         self.previous_state = None
         self.pause_buttons = []
 
+        # Screen shake
+        self.shake_offset_x = 0
+        self.shake_offset_y = 0
+        self.shake_intensity = 0
+        self.shake_duration = 0
+
+        # Background themes
+        self.current_background = 0
+        self.background_colors = [
+            (10, 10, 30),      # Dark blue - Space
+            (30, 10, 30),      # Purple - Nebula
+            (10, 30, 30),      # Cyan - Ice field
+            (30, 20, 10),      # Orange - Sun zone
+            (5, 5, 5),         # Black - Deep space
+        ]
+
         self.font = pygame.font.Font(None, 36)
         self.small_font = pygame.font.Font(None, 24)
         self.big_font = pygame.font.Font(None, 72)
@@ -796,6 +812,11 @@ class CosmicDefender:
             velocity = (random.uniform(-200, 200), random.uniform(-200, 200))
             self.particles.append(Particle(x, y, color, velocity, random.uniform(0.5, 1.5)))
 
+    def add_screen_shake(self, intensity, duration=0.2):
+        """Add screen shake effect"""
+        self.shake_intensity = intensity
+        self.shake_duration = duration
+
     def handle_events(self):
         mouse_pos = pygame.mouse.get_pos()
         mouse_clicked = False
@@ -983,6 +1004,17 @@ class CosmicDefender:
             self.enemies_per_wave = 10
 
     def update_game(self, dt):
+        # Update screen shake
+        if self.shake_duration > 0:
+            self.shake_duration -= dt
+            if self.shake_duration <= 0:
+                self.shake_offset_x = 0
+                self.shake_offset_y = 0
+                self.shake_intensity = 0
+            else:
+                self.shake_offset_x = random.uniform(-self.shake_intensity, self.shake_intensity)
+                self.shake_offset_y = random.uniform(-self.shake_intensity, self.shake_intensity)
+
         self.player.update(dt)
 
         if self.player.can_shoot() and (pygame.key.get_pressed()[pygame.K_SPACE] or
@@ -1026,6 +1058,7 @@ class CosmicDefender:
                     if enemy.take_damage(bullet.damage):
                         self.score += enemy.points
                         self.create_explosion(enemy.x, enemy.y)
+                        self.add_screen_shake(3, 0.1)  # Small shake for normal enemies
                         self.spawn_power_up(enemy.x, enemy.y)
                         self.enemies.remove(enemy)
                     self.bullets.remove(bullet)
@@ -1037,6 +1070,7 @@ class CosmicDefender:
                 if self.giga_boss.take_damage(bullet.damage):
                     self.score += self.giga_boss.points
                     self.create_explosion(self.giga_boss.x, self.giga_boss.y, PURPLE, 20)
+                    self.add_screen_shake(15, 0.4)  # Big shake for boss death
                     self.spawn_power_up(self.giga_boss.x, self.giga_boss.y)
                     self.giga_boss = None
                 self.bullets.remove(bullet)
@@ -1090,6 +1124,9 @@ class CosmicDefender:
                 self.boss_spawned_this_wave = False
                 self.enemies_per_wave += 1  # Gradually increase enemies
                 self.spawn_cooldown = max(0.2, self.spawn_cooldown - 0.02)
+                # Change background every 10 waves
+                if self.wave % 10 == 0:
+                    self.current_background = (self.current_background + 1) % len(self.background_colors)
         else:
             # Normal campaign mode
             self.spawn_timer += dt
@@ -1105,9 +1142,61 @@ class CosmicDefender:
                 self.enemies_spawned = 0
                 self.enemies_per_wave += 2
                 self.spawn_cooldown = max(0.3, self.spawn_cooldown - 0.05)
+                # Change background every 10 waves
+                if self.wave % 10 == 0:
+                    self.current_background = (self.current_background + 1) % len(self.background_colors)
 
                 if self.wave > 10:
                     self.state = GameState.VICTORY
+
+    def draw_offscreen_indicators(self):
+        """Draw arrows pointing to off-screen enemies"""
+        margin = 30
+        indicator_size = 15
+
+        for enemy in self.enemies:
+            # Check if enemy is off-screen
+            if enemy.x < 0 or enemy.x > self.current_width or enemy.y < 0:
+                # Calculate arrow position at screen edge
+                arrow_x = max(margin, min(self.current_width - margin, enemy.x))
+                arrow_y = max(margin, min(self.current_height - margin, enemy.y))
+
+                # Calculate direction to enemy
+                angle = math.atan2(enemy.y - arrow_y, enemy.x - arrow_x)
+
+                # Draw arrow pointing to enemy
+                arrow_color = enemy.color
+                # Arrow triangle
+                point1 = (arrow_x + math.cos(angle) * indicator_size,
+                         arrow_y + math.sin(angle) * indicator_size)
+                point2 = (arrow_x + math.cos(angle + 2.5) * indicator_size * 0.6,
+                         arrow_y + math.sin(angle + 2.5) * indicator_size * 0.6)
+                point3 = (arrow_x + math.cos(angle - 2.5) * indicator_size * 0.6,
+                         arrow_y + math.sin(angle - 2.5) * indicator_size * 0.6)
+
+                pygame.draw.polygon(self.screen, arrow_color, [point1, point2, point3])
+                pygame.draw.polygon(self.screen, WHITE, [point1, point2, point3], 2)
+
+        # Do the same for giga boss
+        if self.giga_boss:
+            if self.giga_boss.x < 0 or self.giga_boss.x > self.current_width or self.giga_boss.y < 0:
+                arrow_x = max(margin, min(self.current_width - margin, self.giga_boss.x))
+                arrow_y = max(margin, min(self.current_height - margin, self.giga_boss.y))
+
+                angle = math.atan2(self.giga_boss.y - arrow_y, self.giga_boss.x - arrow_x)
+
+                # Bigger arrow for boss
+                boss_indicator_size = 25
+                arrow_color = PURPLE
+                point1 = (arrow_x + math.cos(angle) * boss_indicator_size,
+                         arrow_y + math.sin(angle) * boss_indicator_size)
+                point2 = (arrow_x + math.cos(angle + 2.5) * boss_indicator_size * 0.6,
+                         arrow_y + math.sin(angle + 2.5) * boss_indicator_size * 0.6)
+                point3 = (arrow_x + math.cos(angle - 2.5) * boss_indicator_size * 0.6,
+                         arrow_y + math.sin(angle - 2.5) * boss_indicator_size * 0.6)
+
+                pygame.draw.polygon(self.screen, arrow_color, [point1, point2, point3])
+                pygame.draw.polygon(self.screen, WHITE, [point1, point2, point3], 3)
 
     def draw_stars(self):
         for star in self.stars:
@@ -1142,6 +1231,9 @@ class CosmicDefender:
         if self.player.shield > 0:
             shield_ratio = self.player.shield / self.player.max_shield
             pygame.draw.rect(self.screen, CYAN, (10, 105, health_bar_width * shield_ratio, 5))
+
+        # Draw off-screen enemy indicators
+        self.draw_offscreen_indicators()
 
     def draw_menu(self):
         title = self.big_font.render("COSMIC DEFENDER", True, WHITE)
@@ -1570,26 +1662,39 @@ class CosmicDefender:
             elif self.state == GameState.ENTER_NAME:
                 self.cursor_timer += dt
 
-            self.screen.fill(BLACK)
+            # Fill with dynamic background color
+            bg_color = self.background_colors[self.current_background]
+            self.screen.fill(bg_color)
             self.draw_stars()
 
             if self.state == GameState.MENU:
                 self.draw_menu()
             elif self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
-                self.player.draw(self.screen)
+                # Create a temporary surface for game elements
+                game_surface = pygame.Surface((self.current_width, self.current_height))
+                game_surface.fill(bg_color)
+
+                # Draw stars on game surface
+                for star in self.stars:
+                    pygame.draw.circle(game_surface, WHITE, star, 1)
+
+                self.player.draw(game_surface)
 
                 for bullet in self.bullets:
-                    bullet.draw(self.screen)
+                    bullet.draw(game_surface)
                 for bullet in self.enemy_bullets:
-                    bullet.draw(self.screen)
+                    bullet.draw(game_surface)
                 for enemy in self.enemies:
-                    enemy.draw(self.screen)
+                    enemy.draw(game_surface)
                 if self.giga_boss:
-                    self.giga_boss.draw(self.screen)
+                    self.giga_boss.draw(game_surface)
                 for power_up in self.power_ups:
-                    power_up.draw(self.screen)
+                    power_up.draw(game_surface)
                 for particle in self.particles:
-                    particle.draw(self.screen)
+                    particle.draw(game_surface)
+
+                # Apply screen shake offset
+                self.screen.blit(game_surface, (self.shake_offset_x, self.shake_offset_y))
 
                 self.draw_ui()
             elif self.state == GameState.PAUSED:

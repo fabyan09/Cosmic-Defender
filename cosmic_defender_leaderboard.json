@@ -1,7 +1,16 @@
 {
-  "last_updated": "2025-09-30T14:40:55.789605",
-  "total_scores": 5,
+  "last_updated": "2025-09-30T15:44:46.665203",
+  "total_scores": 6,
   "scores": [
+    {
+      "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
+      "name": "Fab",
+      "score": 5905,
+      "wave": 20,
+      "mode": "infinite",
+      "timestamp": "2025-09-30T15:44:46.648248",
+      "date": "2025-09-30 15:44"
+    },
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
       "name": "fab",
