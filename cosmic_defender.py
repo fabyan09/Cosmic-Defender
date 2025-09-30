@@ -66,7 +66,7 @@ class Bullet:
         self.color = color
         self.rect = pygame.Rect(x-2, y-2, 4, 8)
 
-    def update(self, dt, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT):
+    def update(self, dt, screen_width, screen_height):
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.rect.center = (int(self.x), int(self.y))
@@ -110,7 +110,7 @@ class Enemy:
 
         self.rect = pygame.Rect(x-self.size//2, y-self.size//2, self.size, self.size)
 
-    def update(self, dt, player_x, player_y, screen_height=SCREEN_HEIGHT):
+    def update(self, dt, player_x, player_y, screen_height):
         if self.enemy_type == "boss":
             self.y += self.speed * dt * 0.5
             self.x += math.sin(self.y * 0.01) * 50 * dt
@@ -162,7 +162,7 @@ class PowerUp:
         }
         self.color = colors.get(power_type, WHITE)
 
-    def update(self, dt, screen_height=SCREEN_HEIGHT):
+    def update(self, dt, screen_height):
         self.float_offset += dt * 3
         self.y += 50 * dt
         self.rect.center = (int(self.x), int(self.y + math.sin(self.float_offset) * 3))
@@ -313,7 +313,7 @@ class CosmicDefender:
 
         self.font = pygame.font.Font(None, 36)
         self.big_font = pygame.font.Font(None, 72)
-        self.stars = [(random.randint(0, self.current_width), random.randint(0, self.current_height)) for _ in range(100)]
+        self.stars = [(random.randint(0, self.current_width), random.randint(0, self.current_height)) for _ in range(min(200, max(100, self.current_width // 10)))]
 
         # Score system
         self.scores_file = "scores.json"
@@ -331,7 +331,7 @@ class CosmicDefender:
             self.current_width, self.current_height = SCREEN_WIDTH, SCREEN_HEIGHT
 
         # Regenerate stars for new screen size
-        self.stars = [(random.randint(0, self.current_width), random.randint(0, self.current_height)) for _ in range(100)]
+        self.stars = [(random.randint(0, self.current_width), random.randint(0, self.current_height)) for _ in range(min(200, max(100, self.current_width // 10)))]
 
         # Update player bounds
         if hasattr(self, 'player') and self.player:
@@ -397,6 +397,14 @@ class CosmicDefender:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            elif event.type == pygame.VIDEORESIZE and not self.fullscreen:
+                self.current_width, self.current_height = event.w, event.h
+                self.screen = pygame.display.set_mode((self.current_width, self.current_height), pygame.RESIZABLE)
+                # Regenerate stars for new screen size
+                self.stars = [(random.randint(0, self.current_width), random.randint(0, self.current_height)) for _ in range(min(200, max(100, self.current_width // 10)))]
+                # Update player bounds
+                if hasattr(self, 'player') and self.player:
+                    self.player.update_screen_bounds(self.current_width, self.current_height)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     self.toggle_fullscreen()
@@ -463,9 +471,11 @@ class CosmicDefender:
                 continue
 
             if enemy.can_shoot():
-                angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
-                velocity = (math.cos(angle) * 200, math.sin(angle) * 200)
-                self.enemy_bullets.append(Bullet(enemy.x, enemy.y, velocity, color=RED))
+                # Only shoot if enemy is within screen bounds
+                if 0 <= enemy.x <= self.current_width and 0 <= enemy.y <= self.current_height:
+                    angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                    velocity = (math.cos(angle) * 200, math.sin(angle) * 200)
+                    self.enemy_bullets.append(Bullet(enemy.x, enemy.y, velocity, color=RED))
 
         self.power_ups = [power_up for power_up in self.power_ups if power_up.update(dt, self.current_height)]
         self.particles = [particle for particle in self.particles if particle.update(dt)]
