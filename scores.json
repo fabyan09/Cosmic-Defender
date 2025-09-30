@@ -57,9 +57,23 @@
     "date": "2025-01-13 12:20"
   },
   {
+    "name": "test",
+    "score": 940,
+    "wave": 7,
+    "mode": "normal",
+    "date": "2025-09-30 14:40"
+  },
+  {
     "name": "fabrice",
     "score": 580,
     "wave": 5,
     "date": "2025-09-29 17:40"
+  },
+  {
+    "name": "test",
+    "score": 50,
+    "wave": 3,
+    "mode": "infinite",
+    "date": "2025-09-30 14:32"
   }
 ]
