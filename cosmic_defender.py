@@ -625,15 +625,10 @@ class CosmicDefender:
         center_x = self.current_width // 2
         start_y = self.current_height // 2 - 50
 
-        # Status de l'upload automatique
-        upload_status = ""
-        if self.github_uploader and self.github_uploader.is_configured():
-            upload_status = " (Auto-Upload ✓)"
-
         self.menu_buttons = [
             Button(center_x, start_y - 60, button_width, button_height, "CAMPAIGN MODE", self.font),
             Button(center_x, start_y, button_width, button_height, "INFINITE MODE", self.font),
-            Button(center_x, start_y + 60, button_width, button_height, f"LEADERBOARD{upload_status}", self.font),
+            Button(center_x, start_y + 60, button_width, button_height, "LEADERBOARD", self.font),
             Button(center_x, start_y + 120, button_width, button_height, "QUIT", self.font)
         ]
 
@@ -860,7 +855,8 @@ class CosmicDefender:
                     elif i == 1:  # Infinite Mode
                         self.start_game("infinite")
                     elif i == 2:  # Leaderboard
-                        self.state = GameState.LEADERBOARD
+                        import webbrowser
+                        webbrowser.open("https://fabyan09.github.io/cosmic-defender-leaderboard/")
                     elif i == 3:  # Quit
                         self.running = False
         else:
@@ -954,6 +950,7 @@ class CosmicDefender:
         self.enemy_bullets.clear()
         self.enemies.clear()
         self.giga_boss = None
+        self.boss_spawned_this_wave = False
         self.power_ups.clear()
         self.particles.clear()
         self.score = 0
@@ -1056,8 +1053,9 @@ class CosmicDefender:
         # Wave management
         if self.game_mode == "infinite":
             # In infinite mode, check for giga boss every 10 waves
-            if self.wave % 10 == 0 and not self.giga_boss and len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
+            if self.wave % 10 == 0 and not self.giga_boss and not self.boss_spawned_this_wave and len(self.enemies) == 0 and self.enemies_spawned >= self.enemies_per_wave:
                 self.spawn_giga_boss()
+                self.boss_spawned_this_wave = True
             elif not self.giga_boss:  # Normal enemy spawning when no giga boss
                 self.spawn_timer += dt
                 if (self.spawn_timer >= self.spawn_cooldown and
@@ -1071,6 +1069,7 @@ class CosmicDefender:
             if self.enemies_spawned >= self.enemies_per_wave and len(self.enemies) == 0 and not self.giga_boss:
                 self.wave += 1
                 self.enemies_spawned = 0
+                self.boss_spawned_this_wave = False
                 self.enemies_per_wave += 1  # Gradually increase enemies
                 self.spawn_cooldown = max(0.2, self.spawn_cooldown - 0.02)
         else:
