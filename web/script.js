@@ -1,4 +1,4 @@
-// Cosmic Defender Leaderboard JavaScript
+// Cosmic Defender Leaderboard JavaScript - Modern Version
 
 class CosmicLeaderboard {
     constructor() {
@@ -23,6 +23,17 @@ class CosmicLeaderboard {
             btn.addEventListener('click', (e) => {
                 const mode = e.target.dataset.mode;
                 this.setFilter(mode);
+
+                // Update active state with modern styling
+                filterButtons.forEach(b => {
+                    b.classList.remove('bg-gradient-to-r', 'from-cyan-500', 'to-blue-600',
+                                      'shadow-cyan-500/50', 'text-white', 'active');
+                    b.classList.add('glass-effect', 'text-gray-300');
+                });
+
+                e.target.classList.remove('glass-effect', 'text-gray-300');
+                e.target.classList.add('bg-gradient-to-r', 'from-cyan-500', 'to-blue-600',
+                                      'shadow-cyan-500/50', 'text-white', 'active');
             });
         });
 
@@ -49,8 +60,8 @@ class CosmicLeaderboard {
         const errorElement = document.getElementById('error');
 
         try {
-            loadingElement.style.display = 'block';
-            errorElement.style.display = 'none';
+            loadingElement.classList.remove('hidden');
+            errorElement.classList.add('hidden');
 
             // Try to load from GitHub Pages first, then fallback to local file
             let response;
@@ -78,11 +89,11 @@ class CosmicLeaderboard {
             const lastUpdated = new Date(data.last_updated).toLocaleString('fr-FR');
             document.getElementById('last-updated').textContent = lastUpdated;
 
-            loadingElement.style.display = 'none';
+            loadingElement.classList.add('hidden');
         } catch (error) {
             console.error('Error loading scores:', error);
-            loadingElement.style.display = 'none';
-            errorElement.style.display = 'block';
+            loadingElement.classList.add('hidden');
+            errorElement.classList.remove('hidden');
 
             // Load demo data for demonstration
             this.loadDemoData();
@@ -98,18 +109,14 @@ class CosmicLeaderboard {
             { name: "SPACE_COMMANDER", score: 9340, wave: 10, mode: "normal", date: "2024-01-14 19:15" },
             { name: "NEBULA_FIGHTER", score: 8760, wave: 18, mode: "infinite", date: "2024-01-14 16:45" }
         ];
+
+        // Update stats and render with demo data
+        this.updateStats();
+        this.renderLeaderboard();
     }
 
     setFilter(mode) {
         this.currentFilter = mode;
-
-        // Update filter buttons
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
-
-        // Filter scores
         this.applyFilters();
         this.renderLeaderboard();
     }
@@ -135,9 +142,11 @@ class CosmicLeaderboard {
     updateClearButton() {
         const clearBtn = document.getElementById('clear-search');
         if (this.searchTerm) {
-            clearBtn.classList.add('visible');
+            clearBtn.classList.remove('hidden');
+            clearBtn.classList.add('flex');
         } else {
-            clearBtn.classList.remove('visible');
+            clearBtn.classList.add('hidden');
+            clearBtn.classList.remove('flex');
         }
     }
 
@@ -145,10 +154,6 @@ class CosmicLeaderboard {
         const uniquePlayers = new Set(this.scores.map(score => score.name)).size;
         const highestScore = Math.max(...this.scores.map(score => score.score), 0);
         const highestWave = Math.max(...this.scores.map(score => score.wave), 0);
-
-        document.getElementById('total-players').textContent = uniquePlayers.toLocaleString();
-        document.getElementById('highest-score').textContent = highestScore.toLocaleString();
-        document.getElementById('highest-wave').textContent = highestWave;
 
         // Animate numbers
         this.animateNumber('total-players', uniquePlayers);
@@ -170,7 +175,7 @@ class CosmicLeaderboard {
             const easeOutCubic = 1 - Math.pow(1 - progress, 3);
             const currentValue = Math.floor(startValue + (targetValue - startValue) * easeOutCubic);
 
-            element.textContent = currentValue.toLocaleString();
+            element.textContent = currentValue.toLocaleString('fr-FR');
 
             if (progress < 1) {
                 requestAnimationFrame(animate);
@@ -199,7 +204,8 @@ class CosmicLeaderboard {
             }
 
             row.innerHTML = `
-                <td colspan="6" style="text-align: center; padding: 40px; color: #666;">
+                <td colspan="6" class="text-center py-12 text-gray-400">
+                    <div class="text-4xl mb-2">🔍</div>
                     ${message}
                 </td>
             `;
@@ -209,19 +215,38 @@ class CosmicLeaderboard {
 
         scoresToShow.forEach((score, index) => {
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="rank">${this.getRankDisplay(index + 1)}</td>
-                <td class="name">${this.escapeHtml(score.name)}</td>
-                <td class="score">${score.score.toLocaleString()}</td>
-                <td>${score.wave}</td>
-                <td><span class="mode-${score.mode}">${score.mode.toUpperCase()}</span></td>
-                <td>${this.formatDate(score.date)}</td>
-            `;
+            row.className = 'hover:bg-white/5 transition-colors duration-200';
 
-            // Add special effects for top 3
-            if (index < 3) {
-                row.classList.add(`rank-${index + 1}`);
+            // Special styling for top 3
+            let rankDisplay = index + 1;
+            let rankClass = 'text-gray-400';
+            if (index === 0) {
+                rankDisplay = '🥇';
+                row.className += ' bg-gradient-to-r from-yellow-500/10 to-transparent';
+            } else if (index === 1) {
+                rankDisplay = '🥈';
+                row.className += ' bg-gradient-to-r from-gray-400/10 to-transparent';
+            } else if (index === 2) {
+                rankDisplay = '🥉';
+                row.className += ' bg-gradient-to-r from-orange-600/10 to-transparent';
             }
+
+            // Mode badge styling
+            let modeBadge = '';
+            if (score.mode === 'normal') {
+                modeBadge = `<span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-300">CAMPAGNE</span>`;
+            } else {
+                modeBadge = `<span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300">INFINI</span>`;
+            }
+
+            row.innerHTML = `
+                <td class="px-6 py-4 text-center text-2xl">${rankDisplay}</td>
+                <td class="px-6 py-4 text-left font-bold text-cyan-400">${this.escapeHtml(score.name)}</td>
+                <td class="px-6 py-4 text-center font-bold text-green-400">${score.score.toLocaleString('fr-FR')}</td>
+                <td class="px-6 py-4 text-center text-blue-300">${score.wave}</td>
+                <td class="px-6 py-4 text-center">${modeBadge}</td>
+                <td class="px-6 py-4 text-center text-gray-400 text-sm">${this.formatDate(score.date)}</td>
+            `;
 
             tbody.appendChild(row);
 
@@ -237,14 +262,6 @@ class CosmicLeaderboard {
                 });
             }, index * 50);
         });
-    }
-
-    getRankDisplay(rank) {
-        const medals = ['🥇', '🥈', '🥉'];
-        if (rank <= 3) {
-            return medals[rank - 1];
-        }
-        return rank;
     }
 
     formatDate(dateString) {
@@ -271,24 +288,3 @@ class CosmicLeaderboard {
 document.addEventListener('DOMContentLoaded', () => {
     new CosmicLeaderboard();
 });
-
-// Add some cosmic effects
-function createCosmicEffects() {
-    // Add twinkling effect to stats
-    const statNumbers = document.querySelectorAll('.stat-number');
-    statNumbers.forEach(stat => {
-        setInterval(() => {
-            stat.style.textShadow = `0 0 ${Math.random() * 20 + 10}px #00ffff`;
-        }, 2000 + Math.random() * 3000);
-    });
-
-    // Add subtle glow effects
-    const title = document.querySelector('.title');
-    setInterval(() => {
-        const intensity = Math.random() * 40 + 20;
-        title.style.textShadow = `0 0 ${intensity}px #00ffff, 0 0 ${intensity * 2}px #00ffff`;
-    }, 3000);
-}
-
-// Start cosmic effects after a short delay
-setTimeout(createCosmicEffects, 1000);
