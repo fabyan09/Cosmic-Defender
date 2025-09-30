@@ -23,6 +23,10 @@ echo.
 
 REM Installation des dépendances
 echo Installation des dépendances...
+REM Mise à jour de pip et installation de setuptools/distutils
+python -m pip install --upgrade pip
+python -m pip install --user setuptools
+python -m pip install --user distutils
 python -m pip install --user pygame==2.5.2 numpy==1.24.3
 if errorlevel 1 (
     echo ERREUR lors de l'installation des dépendances
