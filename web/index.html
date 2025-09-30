@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Defender - Leaderboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="container">
+        <header>
+            <h1 class="title">🚀 COSMIC DEFENDER</h1>
+            <h2 class="subtitle">LEADERBOARD GALACTIQUE</h2>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <span class="stat-number" id="total-players">-</span>
+                <span class="stat-label">Joueurs</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="highest-score">-</span>
+                <span class="stat-label">Meilleur Score</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number" id="highest-wave">-</span>
+                <span class="stat-label">Vague Max</span>
+            </div>
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" data-mode="all">TOUS</button>
+            <button class="filter-btn" data-mode="normal">CAMPAGNE</button>
+            <button class="filter-btn" data-mode="infinite">INFINI</button>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="🔍 Rechercher un joueur..." class="search-input">
+            <button id="clear-search" class="clear-btn">✕</button>
+        </div>
+
+        <div class="leaderboard">
+            <table id="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th class="rank-col">#</th>
+                        <th class="name-col">COMMANDANT</th>
+                        <th class="score-col">SCORE</th>
+                        <th class="wave-col">VAGUE</th>
+                        <th class="mode-col">MODE</th>
+                        <th class="date-col">DATE</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <!-- Scores will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Chargement des données galactiques...</p>
+        </div>
+
+        <div class="error" id="error" style="display: none;">
+            <p>❌ Erreur de connexion au commandement galactique</p>
+        </div>
+
+        <footer>
+            <p class="update-time">Dernière mise à jour: <span id="last-updated">-</span></p>
+            <p class="game-info">
+                <a href="https://github.com/fabyan09/Cosmic-Defender" target="_blank">
+                    📥 Télécharger Cosmic Defender
+                </a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
