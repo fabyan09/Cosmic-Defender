@@ -139,11 +139,4 @@ Bon voyage dans l'espace, Commandant ! 🌌
 - **Fullscreen amélioré** : Adaptation parfaite à toutes les résolutions
 - **Feedback visuel** : Effets hover et animations
 
-## 📁 Guides disponibles
-
-- **`GUIDE_LEADERBOARD.md`** : Déployer votre site leaderboard
-- **`GUIDE_AUTO_UPLOAD.md`** : Configurer l'upload automatique
-- **`deploy_leaderboard.py`** : Script de déploiement automatique
-- **`test_github_upload.py`** : Tester votre configuration GitHub
-
 **🚀 Explorez l'univers infini de Cosmic Defender !**
