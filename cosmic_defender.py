@@ -103,21 +103,39 @@ class Particle:
         pygame.draw.circle(screen, color, (int(self.x), int(self.y)), 3)
 
 class Bullet:
-    def __init__(self, x, y, velocity, damage=1, color=YELLOW):
+    def __init__(self, x, y, velocity, damage=1, color=YELLOW, is_player_bullet=True):
         self.x = x
         self.y = y
         self.vx, self.vy = velocity
         self.damage = damage
         self.color = color
         self.rect = pygame.Rect(x-2, y-2, 4, 8)
+        self.is_player_bullet = is_player_bullet
+        self.trail = []  # Trail positions (only for enemy bullets)
+        self.trail_max_length = 8
 
     def update(self, dt, screen_width, screen_height):
+        # Add current position to trail (only for enemy bullets)
+        if not self.is_player_bullet:
+            self.trail.append((self.x, self.y))
+            if len(self.trail) > self.trail_max_length:
+                self.trail.pop(0)
+
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.rect.center = (int(self.x), int(self.y))
         return 0 <= self.x <= screen_width and 0 <= self.y <= screen_height
 
     def draw(self, screen):
+        # Draw trail only for enemy bullets
+        if not self.is_player_bullet:
+            for i, (trail_x, trail_y) in enumerate(self.trail):
+                alpha = (i + 1) / len(self.trail)
+                trail_color = tuple(int(c * alpha) for c in self.color)
+                trail_size = int(2 * alpha) + 1
+                pygame.draw.circle(screen, trail_color, (int(trail_x), int(trail_y)), trail_size)
+
+        # Draw main bullet
         pygame.draw.ellipse(screen, self.color, self.rect)
 
 class Enemy:
@@ -227,6 +245,12 @@ class Player:
         self.speed = 300
         self.size = 15
         self.health = 100
+
+        # Trail system
+        self.trail = []
+        self.trail_max_length = 15
+        self.trail_timer = 0
+        self.trail_spawn_rate = 0.02  # Spawn trail every 0.02s
         self.max_health = 100
         self.shield = 0
         self.max_shield = 50
@@ -244,23 +268,68 @@ class Player:
         self.screen_width = width
         self.screen_height = height
 
-    def update(self, dt):
+    def update(self, dt, joystick=None):
         keys = pygame.key.get_pressed()
 
+        # Check if player is moving
+        is_moving = False
+        move_x = 0
+        move_y = 0
+
+        # Keyboard input
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            self.x -= self.speed * dt
+            move_x -= 1
+            is_moving = True
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            self.x += self.speed * dt
+            move_x += 1
+            is_moving = True
         if keys[pygame.K_UP] or keys[pygame.K_w]:
-            self.y -= self.speed * dt
+            move_y -= 1
+            is_moving = True
         if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            self.y += self.speed * dt
+            move_y += 1
+            is_moving = True
+
+        # Controller input (analog stick)
+        if joystick:
+            axis_x = joystick.get_axis(0)  # Left stick horizontal
+            axis_y = joystick.get_axis(1)  # Left stick vertical
+
+            # Apply deadzone
+            deadzone = 0.15
+            if abs(axis_x) > deadzone:
+                move_x += axis_x
+                is_moving = True
+            if abs(axis_y) > deadzone:
+                move_y += axis_y
+                is_moving = True
+
+        # Apply movement
+        self.x += move_x * self.speed * dt
+        self.y += move_y * self.speed * dt
 
         self.x = max(self.size, min(self.screen_width - self.size, self.x))
         self.y = max(self.size, min(self.screen_height - self.size, self.y))
 
         self.rect.center = (int(self.x), int(self.y))
         self.shoot_timer += dt
+
+        # Update trail
+        self.trail_timer += dt
+        if is_moving and self.trail_timer >= self.trail_spawn_rate:
+            self.trail.append({
+                'x': self.x,
+                'y': self.y,
+                'age': 0,
+                'lifetime': 0.3
+            })
+            self.trail_timer = 0
+
+        # Update and remove old trail particles
+        for particle in self.trail[:]:
+            particle['age'] += dt
+            if particle['age'] >= particle['lifetime']:
+                self.trail.remove(particle)
 
         if self.rapid_fire_timer > 0:
             self.rapid_fire_timer -= dt
@@ -310,6 +379,14 @@ class Player:
         return self.health <= 0
 
     def draw(self, screen):
+        # Draw trail first (behind player)
+        for particle in self.trail:
+            alpha = 1 - (particle['age'] / particle['lifetime'])
+            trail_color = tuple(int(c * alpha * 0.6) for c in GREEN)
+            trail_size = int(self.size * alpha * 0.5)
+            if trail_size > 0:
+                pygame.draw.circle(screen, trail_color, (int(particle['x']), int(particle['y'])), trail_size)
+
         if self.shield > 0:
             pygame.draw.circle(screen, CYAN, (int(self.x), int(self.y)), self.size + 5, 2)
 
@@ -382,24 +459,24 @@ class GigaBoss:
             for i in range(-2, 3):
                 angle = math.atan2(player_y - self.y, player_x - self.x) + i * 0.3
                 velocity = (math.cos(angle) * 300, math.sin(angle) * 300)
-                bullets.append(Bullet(self.x, self.y + 30, velocity, color=PURPLE))
+                bullets.append(Bullet(self.x, self.y + 30, velocity, color=PURPLE, is_player_bullet=False))
 
         elif self.current_pattern == 1:  # Circle pattern
             for i in range(8):
                 angle = (i / 8) * 2 * math.pi + self.pattern_timer
                 velocity = (math.cos(angle) * 200, math.sin(angle) * 200)
-                bullets.append(Bullet(self.x, self.y + 30, velocity, color=RED))
+                bullets.append(Bullet(self.x, self.y + 30, velocity, color=RED, is_player_bullet=False))
 
         elif self.current_pattern == 2:  # Aimed burst
             for _ in range(3):
                 angle = math.atan2(player_y - self.y, player_x - self.x) + random.uniform(-0.2, 0.2)
                 velocity = (math.cos(angle) * 400, math.sin(angle) * 400)
-                bullets.append(Bullet(self.x, self.y + 30, velocity, color=ORANGE))
+                bullets.append(Bullet(self.x, self.y + 30, velocity, color=ORANGE, is_player_bullet=False))
 
         else:  # Laser-like vertical shots
             for i in range(-1, 2):
                 velocity = (i * 100, 350)
-                bullets.append(Bullet(self.x + i * 50, self.y + 30, velocity, color=YELLOW))
+                bullets.append(Bullet(self.x + i * 50, self.y + 30, velocity, color=YELLOW, is_player_bullet=False))
 
         return bullets
 
@@ -578,6 +655,14 @@ class CosmicDefender:
         pygame.display.set_caption("Cosmic Defender")
         self.clock = pygame.time.Clock()
         self.running = True
+
+        # Controller/Gamepad support
+        pygame.joystick.init()
+        self.joystick = None
+        if pygame.joystick.get_count() > 0:
+            self.joystick = pygame.joystick.Joystick(0)
+            self.joystick.init()
+            print(f"Controller detected: {self.joystick.get_name()}")
 
         # Current screen dimensions (updated when switching modes)
         self.current_width = SCREEN_WIDTH
@@ -817,6 +902,16 @@ class CosmicDefender:
         self.shake_intensity = intensity
         self.shake_duration = duration
 
+        # Controller rumble/vibration
+        if self.joystick:
+            try:
+                # Normalize intensity (0.0 to 1.0)
+                rumble_intensity = min(intensity / 20.0, 1.0)
+                # Rumble with low and high frequency motors
+                self.joystick.rumble(rumble_intensity, rumble_intensity, int(duration * 1000))
+            except:
+                pass  # Some controllers don't support rumble
+
     def handle_events(self):
         mouse_pos = pygame.mouse.get_pos()
         mouse_clicked = False
@@ -835,6 +930,17 @@ class CosmicDefender:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
                     mouse_clicked = True
+            elif event.type == pygame.JOYBUTTONDOWN:
+                # Controller START button (usually button 7 or 9)
+                if event.button in [7, 9]:  # START button
+                    if self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
+                        # Pause the game
+                        self.previous_state = self.state
+                        self.state = GameState.PAUSED
+                    elif self.state == GameState.PAUSED:
+                        # Resume the game
+                        self.state = self.previous_state
+                        self.previous_state = None
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     self.toggle_fullscreen()
@@ -857,6 +963,14 @@ class CosmicDefender:
                         self.player_name = ""
                         self.name_input_active = False
                         self.state = GameState.MENU
+                elif event.key == pygame.K_r:
+                    # Quick Restart
+                    if self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE, GameState.PAUSED]:
+                        # Restart with the same mode
+                        self.start_game(self.game_mode)
+                    elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
+                        # Restart with the same mode
+                        self.start_game(self.game_mode)
                 elif self.state == GameState.MENU:
                     if event.key == pygame.K_SPACE:
                         self.start_game("normal")
@@ -879,8 +993,6 @@ class CosmicDefender:
                         self.player_name = ""
                         self.name_input_active = True
                         self.state = GameState.ENTER_NAME
-                    elif event.key == pygame.K_r:
-                        self.start_game("normal")
 
         # Handle menu button clicks
         if self.state == GameState.MENU:
@@ -1015,10 +1127,20 @@ class CosmicDefender:
                 self.shake_offset_x = random.uniform(-self.shake_intensity, self.shake_intensity)
                 self.shake_offset_y = random.uniform(-self.shake_intensity, self.shake_intensity)
 
-        self.player.update(dt)
+        self.player.update(dt, self.joystick)
 
-        if self.player.can_shoot() and (pygame.key.get_pressed()[pygame.K_SPACE] or
-                                       pygame.mouse.get_pressed()[0]):
+        # Check for shooting (keyboard, mouse, or controller)
+        should_shoot = False
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_SPACE] or pygame.mouse.get_pressed()[0]:
+            should_shoot = True
+
+        # Controller shooting (A button on Xbox, X on PlayStation, Button 0)
+        if self.joystick:
+            if self.joystick.get_button(0):  # A/X button
+                should_shoot = True
+
+        if self.player.can_shoot() and should_shoot:
             self.bullets.extend(self.player.get_bullets())
 
         self.bullets = [bullet for bullet in self.bullets if bullet.update(dt, self.current_width, self.current_height)]
@@ -1035,7 +1157,7 @@ class CosmicDefender:
                 if 0 <= enemy.x <= self.current_width and 0 <= enemy.y <= self.current_height:
                     angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
                     velocity = (math.cos(angle) * 200, math.sin(angle) * 200)
-                    self.enemy_bullets.append(Bullet(enemy.x, enemy.y, velocity, color=RED))
+                    self.enemy_bullets.append(Bullet(enemy.x, enemy.y, velocity, color=RED, is_player_bullet=False))
 
         # Update giga boss
         if self.giga_boss:
@@ -1502,10 +1624,11 @@ class CosmicDefender:
 
         controls_y += 50
         controls = [
-            "ARROW KEYS / WASD - Move",
-            "SPACE - Shoot",
+            "ARROW KEYS / WASD / LEFT STICK - Move",
+            "SPACE / MOUSE / A BUTTON - Shoot",
             "F - Toggle Fullscreen",
-            "ESC - Pause / Resume",
+            "ESC / START - Pause / Resume",
+            "R - Quick Restart",
         ]
 
         for control in controls:
