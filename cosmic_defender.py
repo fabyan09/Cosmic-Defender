@@ -42,6 +42,8 @@ class GameState(Enum):
     LEADERBOARD = 6
     ENTER_NAME = 7
     GITHUB_CONFIG = 8
+    PAUSED = 9
+    RULES = 10
 
 class PowerUpType(Enum):
     RAPID_FIRE = 1
@@ -598,7 +600,12 @@ class CosmicDefender:
         self.spawn_timer = 0
         self.spawn_cooldown = 1.0
 
+        # Pause state
+        self.previous_state = None
+        self.pause_buttons = []
+
         self.font = pygame.font.Font(None, 36)
+        self.small_font = pygame.font.Font(None, 24)
         self.big_font = pygame.font.Font(None, 72)
         self.stars = [(random.randint(0, self.current_width), random.randint(0, self.current_height)) for _ in range(min(200, max(100, self.current_width // 10)))]
 
@@ -626,10 +633,11 @@ class CosmicDefender:
         start_y = self.current_height // 2 - 50
 
         self.menu_buttons = [
-            Button(center_x, start_y - 60, button_width, button_height, "CAMPAIGN MODE", self.font),
-            Button(center_x, start_y, button_width, button_height, "INFINITE MODE", self.font),
-            Button(center_x, start_y + 60, button_width, button_height, "LEADERBOARD", self.font),
-            Button(center_x, start_y + 120, button_width, button_height, "QUIT", self.font)
+            Button(center_x, start_y - 90, button_width, button_height, "CAMPAIGN MODE", self.font),
+            Button(center_x, start_y - 30, button_width, button_height, "INFINITE MODE", self.font),
+            Button(center_x, start_y + 30, button_width, button_height, "RULES", self.font),
+            Button(center_x, start_y + 90, button_width, button_height, "LEADERBOARD", self.font),
+            Button(center_x, start_y + 150, button_width, button_height, "QUIT", self.font)
         ]
 
     def toggle_fullscreen(self):
@@ -809,16 +817,30 @@ class CosmicDefender:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     self.toggle_fullscreen()
-                elif event.key == pygame.K_ESCAPE and self.fullscreen:
-                    self.toggle_fullscreen()
+                elif event.key == pygame.K_ESCAPE:
+                    if self.fullscreen:
+                        self.toggle_fullscreen()
+                    elif self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
+                        # Pause the game
+                        self.previous_state = self.state
+                        self.state = GameState.PAUSED
+                    elif self.state == GameState.PAUSED:
+                        # Resume the game
+                        self.state = self.previous_state
+                        self.previous_state = None
+                    elif self.state in [GameState.LEADERBOARD, GameState.RULES]:
+                        self.state = GameState.MENU
+                    elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
+                        self.state = GameState.MENU
+                    elif self.state == GameState.ENTER_NAME:
+                        self.player_name = ""
+                        self.name_input_active = False
+                        self.state = GameState.MENU
                 elif self.state == GameState.MENU:
                     if event.key == pygame.K_SPACE:
                         self.start_game("normal")
                     elif event.key == pygame.K_l:  # L for Leaderboard
                         self.state = GameState.LEADERBOARD
-                elif self.state == GameState.LEADERBOARD:
-                    if event.key == pygame.K_ESCAPE:
-                        self.state = GameState.MENU
                 elif self.state == GameState.ENTER_NAME:
                     if event.key == pygame.K_RETURN and len(self.player_name.strip()) > 0:
                         self.save_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
@@ -829,10 +851,6 @@ class CosmicDefender:
                         self.state = GameState.LEADERBOARD
                     elif event.key == pygame.K_BACKSPACE:
                         self.player_name = self.player_name[:-1]
-                    elif event.key == pygame.K_ESCAPE:
-                        self.player_name = ""
-                        self.name_input_active = False
-                        self.state = GameState.MENU
                     elif len(self.player_name) < 20 and event.unicode.isprintable():
                         self.player_name += event.unicode
                 elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
@@ -842,8 +860,6 @@ class CosmicDefender:
                         self.state = GameState.ENTER_NAME
                     elif event.key == pygame.K_r:
                         self.start_game("normal")
-                    elif event.key == pygame.K_ESCAPE:
-                        self.state = GameState.MENU
 
         # Handle menu button clicks
         if self.state == GameState.MENU:
@@ -854,10 +870,12 @@ class CosmicDefender:
                         self.start_game("normal")
                     elif i == 1:  # Infinite Mode
                         self.start_game("infinite")
-                    elif i == 2:  # Leaderboard
+                    elif i == 2:  # Rules
+                        self.state = GameState.RULES
+                    elif i == 3:  # Leaderboard
                         import webbrowser
                         webbrowser.open("https://fabyan09.github.io/cosmic-defender-leaderboard/")
-                    elif i == 3:  # Quit
+                    elif i == 4:  # Quit
                         self.running = False
         else:
             # Update button hover states even if not clicked
@@ -1354,6 +1372,193 @@ class CosmicDefender:
         back_rect = back_text.get_rect(center=(self.current_width//2, self.current_height - 50))
         self.screen.blit(back_text, back_rect)
 
+    def draw_pause_menu(self):
+        # Draw semi-transparent overlay
+        overlay = pygame.Surface((self.current_width, self.current_height))
+        overlay.set_alpha(180)
+        overlay.fill(BLACK)
+        self.screen.blit(overlay, (0, 0))
+
+        # Title
+        title = self.big_font.render("PAUSED", True, CYAN)
+        title_rect = title.get_rect(center=(self.current_width//2, 80))
+        self.screen.blit(title, title_rect)
+
+        # Stats section
+        stats_y = 180
+        stats_title = self.font.render("CURRENT STATS", True, YELLOW)
+        self.screen.blit(stats_title, (self.current_width//2 - stats_title.get_width()//2, stats_y))
+
+        stats_y += 50
+        stats = [
+            f"Score: {self.score}",
+            f"Wave: {self.wave}",
+            f"Health: {self.player.health}/{self.player.max_health}",
+            f"Mode: {self.game_mode.upper()}",
+            f"Enemies Alive: {len(self.enemies)}",
+        ]
+
+        for stat in stats:
+            stat_text = self.font.render(stat, True, WHITE)
+            self.screen.blit(stat_text, (self.current_width//2 - stat_text.get_width()//2, stats_y))
+            stats_y += 35
+
+        # Controls section
+        controls_y = stats_y + 40
+        controls_title = self.font.render("CONTROLS", True, YELLOW)
+        self.screen.blit(controls_title, (self.current_width//2 - controls_title.get_width()//2, controls_y))
+
+        controls_y += 50
+        controls = [
+            "ARROW KEYS / WASD - Move",
+            "SPACE - Shoot",
+            "F - Toggle Fullscreen",
+            "ESC - Pause / Resume",
+        ]
+
+        for control in controls:
+            control_text = self.small_font.render(control, True, WHITE)
+            self.screen.blit(control_text, (self.current_width//2 - control_text.get_width()//2, controls_y))
+            controls_y += 30
+
+        # Resume instruction
+        resume_text = self.big_font.render("Press ESC to Resume", True, GREEN)
+        resume_rect = resume_text.get_rect(center=(self.current_width//2, self.current_height - 80))
+        self.screen.blit(resume_text, resume_rect)
+
+    def draw_enemy_preview(self, screen, x, y, enemy_type, size=30):
+        """Draw a small preview of an enemy for the rules page - matches actual game sprites"""
+        rect = pygame.Rect(x - size//2, y - size//2, size, size)
+
+        if enemy_type == "normal":
+            # Normal enemy - red square (from Enemy.draw())
+            color = RED
+            pygame.draw.rect(screen, color, rect)
+            pygame.draw.rect(screen, WHITE, rect, 2)
+        elif enemy_type == "tank":
+            # Tank enemy - dark red square (from Enemy.draw())
+            color = (150, 0, 0)
+            pygame.draw.rect(screen, color, rect)
+            pygame.draw.rect(screen, WHITE, rect, 2)
+        elif enemy_type == "fast":
+            # Fast enemy - pink square (from Enemy.draw())
+            color = (255, 100, 100)
+            pygame.draw.rect(screen, color, rect)
+            pygame.draw.rect(screen, WHITE, rect, 2)
+        elif enemy_type == "boss":
+            # Boss enemy - purple ellipse (from Enemy.draw())
+            color = (100, 0, 100)
+            pygame.draw.ellipse(screen, color, rect)
+            pygame.draw.ellipse(screen, WHITE, rect, 3)
+        elif enemy_type == "gigaboss":
+            # Giga Boss - larger purple ellipse with spikes (from GigaBoss.draw())
+            color = (150, 0, 150)
+            # Main body
+            pygame.draw.ellipse(screen, color, rect)
+            pygame.draw.ellipse(screen, WHITE, rect, 3)
+            # Add spikes
+            for i in range(8):
+                angle = (i / 8) * 2 * math.pi
+                spike_x = rect.centerx + math.cos(angle) * (size // 2 + 5)
+                spike_y = rect.centery + math.sin(angle) * (size // 2 + 5)
+                pygame.draw.line(screen, color, rect.center, (spike_x, spike_y), 2)
+
+    def draw_rules(self):
+        # Title
+        title = self.big_font.render("RULES & ENEMIES", True, CYAN)
+        title_rect = title.get_rect(center=(self.current_width//2, 50))
+        self.screen.blit(title, title_rect)
+
+        # Game objective
+        objective_y = 110
+        objective = self.font.render("OBJECTIVE: Survive waves and destroy all enemies!", True, YELLOW)
+        self.screen.blit(objective, (self.current_width//2 - objective.get_width()//2, objective_y))
+
+        # Enemy types section
+        enemies_y = 170
+        enemies_title = self.font.render("ENEMY TYPES", True, YELLOW)
+        self.screen.blit(enemies_title, (50, enemies_y))
+
+        enemies_y += 50
+        enemy_data = [
+            {
+                "type": "normal",
+                "name": "SCOUT",
+                "health": "1 HP",
+                "speed": "Medium",
+                "points": "10",
+                "desc": "Basic enemy, moves slowly"
+            },
+            {
+                "type": "fast",
+                "name": "INTERCEPTOR",
+                "health": "1 HP",
+                "speed": "Fast",
+                "points": "15",
+                "desc": "Quick and agile"
+            },
+            {
+                "type": "tank",
+                "name": "DESTROYER",
+                "health": "3 HP",
+                "speed": "Slow",
+                "points": "25",
+                "desc": "Armored and durable"
+            },
+            {
+                "type": "boss",
+                "name": "COMMANDER",
+                "health": "20 HP",
+                "speed": "Medium",
+                "points": "100",
+                "desc": "Fires rapidly, zigzag pattern"
+            },
+            {
+                "type": "gigaboss",
+                "name": "TITAN",
+                "health": "50+ HP",
+                "speed": "Slow",
+                "points": "500+",
+                "desc": "Wave 10, 20, 30... Massive threat!"
+            }
+        ]
+
+        for i, enemy in enumerate(enemy_data):
+            y_pos = enemies_y + i * 80
+
+            # Draw enemy preview
+            self.draw_enemy_preview(self.screen, 80, y_pos + 15, enemy["type"], 30)
+
+            # Enemy name
+            name_text = self.font.render(enemy["name"], True, CYAN)
+            self.screen.blit(name_text, (130, y_pos - 5))
+
+            # Stats
+            stats_text = self.small_font.render(
+                f"HP: {enemy['health']}  |  Speed: {enemy['speed']}  |  Points: {enemy['points']}",
+                True, WHITE
+            )
+            self.screen.blit(stats_text, (130, y_pos + 25))
+
+            # Description
+            desc_text = self.small_font.render(enemy["desc"], True, (180, 180, 180))
+            self.screen.blit(desc_text, (130, y_pos + 48))
+
+        # Power-ups section
+        powerups_y = enemies_y + len(enemy_data) * 80 + 20
+        if powerups_y < self.current_height - 100:
+            powerups_title = self.font.render("POWER-UPS", True, YELLOW)
+            self.screen.blit(powerups_title, (50, powerups_y))
+
+            powerups_y += 35
+            powerups_text = self.small_font.render("Dropped by enemies - Rapid Fire, Shield, Multi-Shot, Laser", True, WHITE)
+            self.screen.blit(powerups_text, (50, powerups_y))
+
+        # Back instruction
+        back_text = self.font.render("Press ESC to return", True, GREEN)
+        back_rect = back_text.get_rect(center=(self.current_width//2, self.current_height - 40))
+        self.screen.blit(back_text, back_rect)
+
     def run(self):
         while self.running:
             dt = self.clock.tick(FPS) / 1000.0
@@ -1387,6 +1592,10 @@ class CosmicDefender:
                     particle.draw(self.screen)
 
                 self.draw_ui()
+            elif self.state == GameState.PAUSED:
+                self.draw_pause_menu()
+            elif self.state == GameState.RULES:
+                self.draw_rules()
             elif self.state == GameState.GAME_OVER:
                 self.draw_game_over()
             elif self.state == GameState.VICTORY:
