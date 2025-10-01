@@ -1,0 +1,137 @@
+name: Update Leaderboard
+
+on:
+  push:
+    paths:
+      - 'scores/**/*.json'
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-leaderboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Merge and upload leaderboard
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEADERBOARD_TOKEN }}
+          LEADERBOARD_REPO: fabyan09/cosmic-defender-leaderboard
+        run: |
+          python - <<'EOF'
+          import json
+          import os
+          import glob
+          import base64
+          import requests
+          from datetime import datetime
+
+          # Configuration
+          token = os.environ['GITHUB_TOKEN']
+          repo = os.environ['LEADERBOARD_REPO']
+
+          headers = {
+              "Authorization": f"token {token}",
+              "Accept": "application/vnd.github.v3+json"
+          }
+
+          # Collecte de tous les scores locaux
+          all_scores = []
+          for score_file in glob.glob('scores/**/*.json', recursive=True):
+              try:
+                  with open(score_file, 'r', encoding='utf-8') as f:
+                      data = json.load(f)
+                      if isinstance(data, list):
+                          all_scores.extend(data)
+                      elif isinstance(data, dict) and 'score' in data:
+                          all_scores.append(data)
+                      elif isinstance(data, dict) and 'scores' in data:
+                          all_scores.extend(data['scores'])
+              except Exception as e:
+                  print(f"Erreur lecture {score_file}: {e}")
+
+          print(f"📥 {len(all_scores)} scores locaux collectés")
+
+          # Télécharge le leaderboard existant depuis GitHub
+          file_url = f"https://api.github.com/repos/{repo}/contents/cosmic_defender_leaderboard.json"
+
+          sha = None
+          existing_scores = []
+          try:
+              get_response = requests.get(file_url, headers=headers, timeout=10)
+              if get_response.status_code == 200:
+                  response_data = get_response.json()
+                  sha = response_data.get('sha')
+                  existing_content = base64.b64decode(response_data['content']).decode('utf-8')
+                  existing_data = json.loads(existing_content)
+                  existing_scores = existing_data.get('scores', [])
+                  print(f"📥 {len(existing_scores)} scores existants sur GitHub")
+          except Exception as e:
+              print(f"⚠ Pas de leaderboard existant: {e}")
+
+          # Fusion des scores
+          all_scores.extend(existing_scores)
+
+          # Dédupliquer par player_id + score + timestamp (garder le plus ancien)
+          seen = {}
+          for score in all_scores:
+              key = (score.get('player_id'), score.get('score'), score.get('timestamp', ''))
+              if key not in seen:
+                  seen[key] = score
+
+          merged_scores = list(seen.values())
+
+          # Tri et limite
+          merged_scores.sort(key=lambda x: x.get('score', 0), reverse=True)
+          merged_scores = merged_scores[:250]
+
+          print(f"📊 Leaderboard final: {len(merged_scores)} scores")
+
+          # Prépare les données
+          leaderboard_data = {
+              "last_updated": datetime.now().isoformat(),
+              "total_scores": len(merged_scores),
+              "scores": merged_scores
+          }
+
+          # Upload vers GitHub
+          json_content = json.dumps(leaderboard_data, ensure_ascii=False, indent=2)
+          content_encoded = base64.b64encode(json_content.encode('utf-8')).decode('utf-8')
+
+          payload = {
+              "message": f"Update leaderboard - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {len(merged_scores)} scores",
+              "content": content_encoded,
+              "committer": {
+                  "name": "Cosmic Defender Bot",
+                  "email": "bot@cosmic-defender.game"
+              }
+          }
+
+          if sha:
+              payload["sha"] = sha
+
+          response = requests.put(file_url, headers=headers, json=payload, timeout=30)
+
+          if response.status_code in [200, 201]:
+              print(f"✅ Leaderboard mis à jour avec succès!")
+          else:
+              print(f"❌ Erreur upload: HTTP {response.status_code}")
+              print(response.text)
+              exit(1)
+          EOF
