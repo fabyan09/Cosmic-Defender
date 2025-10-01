@@ -1564,10 +1564,6 @@ class CosmicDefender:
         self.screen.blit(name_text, name_rect)
         self.screen.blit(controls, controls_rect)
 
-        # Draw input box
-        input_rect = pygame.Rect(self.current_width//2 - 150, self.current_height//2 - 15, 300, 30)
-        pygame.draw.rect(self.screen, WHITE, input_rect, 2)
-
     def init_github_config(self):
         """Initialize GitHub configuration interface"""
         self.github_input_field = ""
