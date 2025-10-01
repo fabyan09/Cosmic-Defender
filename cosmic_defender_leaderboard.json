@@ -1,6 +1,6 @@
 {
-  "last_updated": "2025-09-30T15:44:46.665203",
-  "total_scores": 6,
+  "last_updated": "2025-10-01T10:42:19.449857",
+  "total_scores": 9,
   "scores": [
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
@@ -10,6 +10,15 @@
       "mode": "infinite",
       "timestamp": "2025-09-30T15:44:46.648248",
       "date": "2025-09-30 15:44"
+    },
+    {
+      "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
+      "name": "johnny",
+      "score": 3060,
+      "wave": 11,
+      "mode": "normal",
+      "timestamp": "2025-10-01T10:06:20.123983",
+      "date": "2025-10-01 10:06"
     },
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
@@ -40,12 +49,30 @@
     },
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
+      "name": "johnny",
+      "score": 1515,
+      "wave": 10,
+      "mode": "infinite",
+      "timestamp": "2025-10-01T10:42:19.415947",
+      "date": "2025-10-01 10:42"
+    },
+    {
+      "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
       "name": "test",
       "score": 940,
       "wave": 7,
       "mode": "normal",
       "timestamp": "2025-09-30T14:40:55.773626",
       "date": "2025-09-30 14:40"
+    },
+    {
+      "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
+      "name": "yoo",
+      "score": 665,
+      "wave": 6,
+      "mode": "normal",
+      "timestamp": "2025-09-30T16:06:47.519924",
+      "date": "2025-09-30 16:06"
     },
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",

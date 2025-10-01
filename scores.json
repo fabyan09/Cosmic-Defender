@@ -7,6 +7,13 @@
     "date": "2025-09-30 15:44"
   },
   {
+    "name": "johnny",
+    "score": 3060,
+    "wave": 11,
+    "mode": "normal",
+    "date": "2025-10-01 10:06"
+  },
+  {
     "name": "fab",
     "score": 2940,
     "wave": 11,
@@ -43,6 +50,13 @@
     "score": 1800,
     "wave": 8,
     "date": "2025-01-14 16:45"
+  },
+  {
+    "name": "johnny",
+    "score": 1515,
+    "wave": 10,
+    "mode": "infinite",
+    "date": "2025-10-01 10:42"
   },
   {
     "name": "fab",
