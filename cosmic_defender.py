@@ -1049,6 +1049,32 @@ class CosmicDefender:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     self.toggle_fullscreen()
+                # Handle ENTER_NAME state first to prioritize text input
+                if self.state == GameState.ENTER_NAME:
+                    if event.key == pygame.K_ESCAPE:
+                        self.player_name = ""
+                        self.name_input_active = False
+                        self.state = GameState.MENU
+                    elif event.key == pygame.K_RETURN and len(self.player_name.strip()) > 0:
+                        self.save_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
+                        web_score = self.save_web_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
+
+                        # Upload automatique vers GitHub
+                        if self.github_uploader and self.github_uploader.is_configured():
+                            print("\n" + "="*60)
+                            print("📤 Upload automatique du score vers GitHub...")
+                            self.github_uploader.upload_async({"scores": [web_score]})
+                            print("="*60 + "\n")
+                        else:
+                            print("\n⚠️  GitHub non configuré - score sauvegardé localement uniquement\n")
+
+                        self.player_name = ""
+                        self.name_input_active = False
+                        self.state = GameState.LEADERBOARD
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.player_name = self.player_name[:-1]
+                    elif len(self.player_name) < 20 and event.unicode.isprintable():
+                        self.player_name += event.unicode
                 elif event.key == pygame.K_ESCAPE:
                     if self.fullscreen:
                         self.toggle_fullscreen()
@@ -1064,12 +1090,8 @@ class CosmicDefender:
                         self.state = GameState.MENU
                     elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
                         self.state = GameState.MENU
-                    elif self.state == GameState.ENTER_NAME:
-                        self.player_name = ""
-                        self.name_input_active = False
-                        self.state = GameState.MENU
                 elif event.key == pygame.K_r:
-                    # Quick Restart
+                    # Quick Restart (but not during name entry)
                     if self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE, GameState.PAUSED]:
                         # Restart with the same mode
                         self.start_game(self.game_mode)
@@ -1097,27 +1119,6 @@ class CosmicDefender:
                         self.start_game("normal")
                     elif event.key == pygame.K_l:  # L for Leaderboard
                         self.state = GameState.LEADERBOARD
-                elif self.state == GameState.ENTER_NAME:
-                    if event.key == pygame.K_RETURN and len(self.player_name.strip()) > 0:
-                        self.save_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
-                        web_score = self.save_web_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
-
-                        # Upload automatique vers GitHub
-                        if self.github_uploader and self.github_uploader.is_configured():
-                            print("\n" + "="*60)
-                            print("📤 Upload automatique du score vers GitHub...")
-                            self.github_uploader.upload_async({"scores": [web_score]})
-                            print("="*60 + "\n")
-                        else:
-                            print("\n⚠️  GitHub non configuré - score sauvegardé localement uniquement\n")
-
-                        self.player_name = ""
-                        self.name_input_active = False
-                        self.state = GameState.LEADERBOARD
-                    elif event.key == pygame.K_BACKSPACE:
-                        self.player_name = self.player_name[:-1]
-                    elif len(self.player_name) < 20 and event.unicode.isprintable():
-                        self.player_name += event.unicode
                 elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
                     if event.key == pygame.K_s:  # S to save score
                         self.player_name = ""
