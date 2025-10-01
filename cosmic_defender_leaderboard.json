@@ -1,6 +1,6 @@
 {
-  "last_updated": "2025-10-01T11:02:02.508081",
-  "total_scores": 10,
+  "last_updated": "2025-10-01T12:14:00.498881",
+  "total_scores": 11,
   "scores": [
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
@@ -10,6 +10,15 @@
       "mode": "infinite",
       "timestamp": "2025-09-30T15:44:46.648248",
       "date": "2025-09-30 15:44"
+    },
+    {
+      "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",
+      "name": "test",
+      "score": 3845,
+      "wave": 18,
+      "mode": "infinite",
+      "timestamp": "2025-10-01T12:14:00.478934",
+      "date": "2025-10-01 12:14"
     },
     {
       "player_id": "d5790c30-ca36-4295-84a6-d87ea0605cb3",

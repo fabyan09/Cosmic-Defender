@@ -264,6 +264,14 @@ class Player:
 
         self.power_up_duration = 5.0
 
+        # Dash system
+        self.dash_speed = 800
+        self.dash_distance = 150
+        self.dash_cooldown = 2.0
+        self.dash_timer = 0
+        self.is_dashing = False
+        self.dash_direction = (0, 0)
+
     def update_screen_bounds(self, width, height):
         self.screen_width = width
         self.screen_height = height
@@ -271,45 +279,71 @@ class Player:
     def update(self, dt, joystick=None):
         keys = pygame.key.get_pressed()
 
+        # Update dash cooldown timer
+        if self.dash_timer > 0:
+            self.dash_timer -= dt
+
         # Check if player is moving
         is_moving = False
         move_x = 0
         move_y = 0
 
-        # Keyboard input
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            move_x -= 1
-            is_moving = True
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            move_x += 1
-            is_moving = True
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            move_y -= 1
-            is_moving = True
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            move_y += 1
-            is_moving = True
+        # Handle dash movement
+        if self.is_dashing:
+            # Calculate dash movement with bounds checking
+            dash_move_x = self.dash_direction[0] * self.dash_speed * dt
+            dash_move_y = self.dash_direction[1] * self.dash_speed * dt
 
-        # Controller input (analog stick)
-        if joystick:
-            axis_x = joystick.get_axis(0)  # Left stick horizontal
-            axis_y = joystick.get_axis(1)  # Left stick vertical
+            new_x = self.x + dash_move_x
+            new_y = self.y + dash_move_y
 
-            # Apply deadzone
-            deadzone = 0.15
-            if abs(axis_x) > deadzone:
-                move_x += axis_x
+            # Clamp to screen bounds
+            new_x = max(self.size, min(self.screen_width - self.size, new_x))
+            new_y = max(self.size, min(self.screen_height - self.size, new_y))
+
+            self.x = new_x
+            self.y = new_y
+
+            # Check if dash is complete
+            if self.dash_timer <= self.dash_cooldown - 0.2:  # Dash lasts 0.2s
+                self.is_dashing = False
+            is_moving = True
+        else:
+            # Normal movement
+            # Keyboard input
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                move_x -= 1
                 is_moving = True
-            if abs(axis_y) > deadzone:
-                move_y += axis_y
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                move_x += 1
+                is_moving = True
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                move_y -= 1
+                is_moving = True
+            if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                move_y += 1
                 is_moving = True
 
-        # Apply movement
-        self.x += move_x * self.speed * dt
-        self.y += move_y * self.speed * dt
+            # Controller input (analog stick)
+            if joystick:
+                axis_x = joystick.get_axis(0)  # Left stick horizontal
+                axis_y = joystick.get_axis(1)  # Left stick vertical
 
-        self.x = max(self.size, min(self.screen_width - self.size, self.x))
-        self.y = max(self.size, min(self.screen_height - self.size, self.y))
+                # Apply deadzone
+                deadzone = 0.15
+                if abs(axis_x) > deadzone:
+                    move_x += axis_x
+                    is_moving = True
+                if abs(axis_y) > deadzone:
+                    move_y += axis_y
+                    is_moving = True
+
+            # Apply movement
+            self.x += move_x * self.speed * dt
+            self.y += move_y * self.speed * dt
+
+            self.x = max(self.size, min(self.screen_width - self.size, self.x))
+            self.y = max(self.size, min(self.screen_height - self.size, self.y))
 
         self.rect.center = (int(self.x), int(self.y))
         self.shoot_timer += dt
@@ -359,6 +393,20 @@ class Player:
             bullets.append(Bullet(self.x, self.y - self.size, (0, -600)))
         return bullets
 
+    def can_dash(self):
+        return self.dash_timer <= 0 and not self.is_dashing
+
+    def dash(self, direction_x, direction_y):
+        if self.can_dash():
+            # Normalize direction
+            length = math.sqrt(direction_x**2 + direction_y**2)
+            if length > 0:
+                self.dash_direction = (direction_x / length, direction_y / length)
+                self.is_dashing = True
+                self.dash_timer = self.dash_cooldown
+                return True
+        return False
+
     def activate_power_up(self, power_type):
         if power_type == PowerUpType.RAPID_FIRE:
             self.rapid_fire_timer = self.power_up_duration
@@ -405,6 +453,21 @@ class Player:
         ]
         pygame.draw.polygon(screen, color, points)
         pygame.draw.polygon(screen, WHITE, points, 2)
+
+        # Draw dash cooldown bar
+        if self.dash_timer > 0:
+            bar_width = 40
+            bar_height = 4
+            bar_x = self.x - bar_width // 2
+            bar_y = self.y - self.size - 15
+
+            # Background bar (gray)
+            pygame.draw.rect(screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
+
+            # Cooldown progress (white)
+            progress = max(0, 1 - (self.dash_timer / self.dash_cooldown))
+            progress_width = int(bar_width * progress)
+            pygame.draw.rect(screen, WHITE, (bar_x, bar_y, progress_width, bar_height))
 
 class GigaBoss:
     def __init__(self, x, y, wave):
@@ -579,37 +642,64 @@ class GitHubUploader:
         except Exception as e:
             return False, f"Error: {str(e)}"
 
-    def upload_leaderboard(self, leaderboard_data):
-        """Upload leaderboard data to GitHub repository"""
+    def upload_leaderboard(self, new_score_data):
+        """Upload leaderboard data to GitHub repository with merge support"""
         if not self.is_configured() or not self.config.get("auto_upload", False):
             return False, "Not configured or auto-upload disabled"
 
         try:
-            # Convert data to JSON string
-            json_content = json.dumps(leaderboard_data, ensure_ascii=False, indent=2)
-
-            # Encode to base64 (required by GitHub API)
-            content_encoded = base64.b64encode(json_content.encode('utf-8')).decode('utf-8')
-
             headers = {
                 "Authorization": f"token {self.config['token']}",
                 "Accept": "application/vnd.github.v3+json"
             }
 
-            # First, try to get the current file to get its SHA
             file_url = f"https://api.github.com/repos/{self.config['username']}/{self.config['repository']}/contents/cosmic_defender_leaderboard.json"
 
+            # Step 1: Download existing leaderboard
             sha = None
+            existing_scores = []
             try:
                 get_response = requests.get(file_url, headers=headers, timeout=10)
                 if get_response.status_code == 200:
-                    sha = get_response.json().get('sha')
-            except:
-                pass  # File doesn't exist yet, that's ok
+                    response_data = get_response.json()
+                    sha = response_data.get('sha')
 
-            # Prepare the update payload
+                    # Decode existing content
+                    existing_content = base64.b64decode(response_data['content']).decode('utf-8')
+                    existing_data = json.loads(existing_content)
+                    existing_scores = existing_data.get('scores', [])
+                    print(f"📥 Downloaded {len(existing_scores)} existing scores from GitHub")
+            except Exception as e:
+                print(f"⚠ No existing file or error downloading: {e}")
+                # File doesn't exist yet, that's ok
+
+            # Step 2: Merge new score(s) with existing scores
+            if 'scores' in new_score_data:
+                # Add all new scores to existing list
+                existing_scores.extend(new_score_data['scores'])
+            else:
+                # Handle single score format
+                existing_scores.append(new_score_data)
+
+            # Step 3: Sort by score (descending) and limit to top 250
+            existing_scores.sort(key=lambda x: x.get('score', 0), reverse=True)
+            existing_scores = existing_scores[:250]  # Keep top 250 scores
+
+            # Step 4: Prepare merged data
+            merged_data = {
+                "last_updated": datetime.now().isoformat(),
+                "total_scores": len(existing_scores),
+                "scores": existing_scores
+            }
+
+            print(f"📊 Merged leaderboard: {len(existing_scores)} total scores")
+
+            # Step 5: Encode and upload
+            json_content = json.dumps(merged_data, ensure_ascii=False, indent=2)
+            content_encoded = base64.b64encode(json_content.encode('utf-8')).decode('utf-8')
+
             payload = {
-                "message": f"Update leaderboard - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "message": f"Update leaderboard - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {len(existing_scores)} scores",
                 "content": content_encoded,
                 "committer": {
                     "name": "Cosmic Defender",
@@ -620,11 +710,11 @@ class GitHubUploader:
             if sha:
                 payload["sha"] = sha
 
-            # Upload the file
+            # Upload the merged file
             response = requests.put(file_url, headers=headers, json=payload, timeout=30)
 
             if response.status_code in [200, 201]:
-                return True, "Upload successful"
+                return True, f"Upload successful - {len(existing_scores)} scores"
             else:
                 return False, f"Upload failed: HTTP {response.status_code}"
 
@@ -838,9 +928,21 @@ class CosmicDefender:
 
         return web_score
 
-    def export_for_github(self):
+    def export_for_github(self, single_score=None):
         """Export scores in format ready for GitHub Pages"""
         try:
+            # If a single score is provided, upload just that one (will be merged on GitHub)
+            if single_score:
+                print(f"📤 Uploading single score: {single_score['name']} - {single_score['score']}")
+                if self.github_uploader and self.github_uploader.is_configured():
+                    # Send as a dict with 'scores' array containing just this score
+                    upload_data = {
+                        "scores": [single_score]
+                    }
+                    self.github_uploader.upload_async(upload_data)
+                return single_score
+
+            # Otherwise, export all local scores for backup
             if os.path.exists(self.web_scores_file):
                 with open(self.web_scores_file, 'r', encoding='utf-8') as f:
                     scores = json.load(f)
@@ -856,10 +958,6 @@ class CosmicDefender:
                     json.dump(export_data, f, ensure_ascii=False, indent=2)
 
                 print("Scores exported to cosmic_defender_leaderboard.json")
-
-                # Auto-upload to GitHub if configured
-                if self.github_uploader and self.github_uploader.is_configured():
-                    self.github_uploader.upload_async(export_data)
 
                 return export_data
         except Exception as e:
@@ -941,6 +1039,21 @@ class CosmicDefender:
                         # Resume the game
                         self.state = self.previous_state
                         self.previous_state = None
+                # Dash with A button (Xbox) / X button (PS) - Button 0
+                elif event.button == 0:  # A/X button
+                    if self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
+                        # Get current stick direction for dash
+                        if self.joystick:
+                            axis_x = self.joystick.get_axis(0)
+                            axis_y = self.joystick.get_axis(1)
+                            deadzone = 0.15
+                            dash_x = axis_x if abs(axis_x) > deadzone else 0
+                            dash_y = axis_y if abs(axis_y) > deadzone else 0
+                            if dash_x != 0 or dash_y != 0:
+                                self.player.dash(dash_x, dash_y)
+                            else:
+                                # If no stick input, dash forward (up)
+                                self.player.dash(0, -1)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F11:
                     self.toggle_fullscreen()
@@ -971,6 +1084,22 @@ class CosmicDefender:
                     elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
                         # Restart with the same mode
                         self.start_game(self.game_mode)
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    # Dash with keyboard (SHIFT key)
+                    if self.state in [GameState.PLAYING, GameState.PLAYING_INFINITE]:
+                        keys = pygame.key.get_pressed()
+                        dash_x = 0
+                        dash_y = 0
+                        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                            dash_x = -1
+                        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                            dash_x = 1
+                        if keys[pygame.K_UP] or keys[pygame.K_w]:
+                            dash_y = -1
+                        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                            dash_y = 1
+                        if dash_x != 0 or dash_y != 0:
+                            self.player.dash(dash_x, dash_y)
                 elif self.state == GameState.MENU:
                     if event.key == pygame.K_SPACE:
                         self.start_game("normal")
@@ -979,8 +1108,9 @@ class CosmicDefender:
                 elif self.state == GameState.ENTER_NAME:
                     if event.key == pygame.K_RETURN and len(self.player_name.strip()) > 0:
                         self.save_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
-                        self.save_web_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
-                        self.export_for_github()
+                        web_score = self.save_web_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
+                        # Upload only this score to GitHub (will be merged with existing scores)
+                        self.export_for_github(single_score=web_score)
                         self.player_name = ""
                         self.name_input_active = False
                         self.state = GameState.LEADERBOARD
@@ -1135,10 +1265,22 @@ class CosmicDefender:
         if keys[pygame.K_SPACE] or pygame.mouse.get_pressed()[0]:
             should_shoot = True
 
-        # Controller shooting (A button on Xbox, X on PlayStation, Button 0)
+        # Controller shooting (R2 trigger on Xbox/PS, axis 5 or button 7)
         if self.joystick:
-            if self.joystick.get_button(0):  # A/X button
-                should_shoot = True
+            # Try R2/RT trigger (axis 5 for most controllers)
+            try:
+                rt_value = self.joystick.get_axis(5)  # Right trigger
+                if rt_value > 0.1:  # Trigger is pressed
+                    should_shoot = True
+            except:
+                pass
+
+            # Fallback to R2/RT button if axis not available
+            try:
+                if self.joystick.get_button(7):  # R2/RT button
+                    should_shoot = True
+            except:
+                pass
 
         if self.player.can_shoot() and should_shoot:
             self.bullets.extend(self.player.get_bullets())
@@ -1368,7 +1510,7 @@ class CosmicDefender:
 
         # Instructions
         instructions = [
-            "WASD/Arrow Keys: Move | SPACE/Click: Shoot | F11: Fullscreen",
+            "WASD/Arrows: Move | SPACE/Click: Shoot | SHIFT: Dash | F11: Fullscreen",
             "Campaign Mode: Survive 10 waves to win!",
             "Infinite Mode: Endless waves with Giga Bosses every 10 waves!"
         ]
@@ -1625,7 +1767,8 @@ class CosmicDefender:
         controls_y += 50
         controls = [
             "ARROW KEYS / WASD / LEFT STICK - Move",
-            "SPACE / MOUSE / A BUTTON - Shoot",
+            "SPACE / MOUSE / R2 TRIGGER - Shoot",
+            "SHIFT / A BUTTON (Xbox) / X (PS) - Dash",
             "F - Toggle Fullscreen",
             "ESC / START - Pause / Resume",
             "R - Quick Restart",
@@ -1761,13 +1904,29 @@ class CosmicDefender:
 
         # Power-ups section
         powerups_y = enemies_y + len(enemy_data) * 80 + 20
-        if powerups_y < self.current_height - 100:
+        if powerups_y < self.current_height - 180:
             powerups_title = self.font.render("POWER-UPS", True, YELLOW)
             self.screen.blit(powerups_title, (50, powerups_y))
 
             powerups_y += 35
             powerups_text = self.small_font.render("Dropped by enemies - Rapid Fire, Shield, Multi-Shot, Laser", True, WHITE)
             self.screen.blit(powerups_text, (50, powerups_y))
+
+            # Controls section
+            powerups_y += 50
+            controls_title = self.font.render("CONTROLS", True, YELLOW)
+            self.screen.blit(controls_title, (50, powerups_y))
+
+            powerups_y += 35
+            controls_texts = [
+                "Move: ARROW KEYS / WASD / LEFT STICK",
+                "Shoot: SPACE / MOUSE / R2 TRIGGER",
+                "Dash: SHIFT / A BUTTON (Xbox) / X (PS) - Evade quickly!"
+            ]
+            for ctrl_text in controls_texts:
+                ctrl_render = self.small_font.render(ctrl_text, True, WHITE)
+                self.screen.blit(ctrl_render, (50, powerups_y))
+                powerups_y += 25
 
         # Back instruction
         back_text = self.font.render("Press ESC to return", True, GREEN)
