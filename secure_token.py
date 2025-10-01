@@ -53,8 +53,8 @@ class SecureToken:
         Cette fonction sera appelée automatiquement par le jeu
         """
         # Token chiffré et mot de passe embarqués (à configurer via setup)
-        ENCRYPTED_TOKEN = "Z0FBQUFBQm8zUllWazhtSVAxdkRNclZNWkFLM05rOENxQVU0c1diRngzRm9COEViV0pJNW5BTDJGQzBXZ0d6T3lIaFB1dlctdHZ3emU0QW41LUlnUTVXeWx2X1dXV19mNnBGSjRWTjVHSDFuMUpBUnowWWh3RzREMllFQnd3WVRHMU91RzJUTmRWbFA="
-        PASSWORD = "ls72iw78&*F09"
+        ENCRYPTED_TOKEN = "Z0FBQUFBQm8zUzBuZEtXdkpYVHQ4bUo1QVBpaVN1dFNZY0s1bXFkQTRxR1Yxd090d3VIQzBNdjludTV2X0daSVdDSWkwc1NyZG81cXJNUkdqQ2xsLWdMUEhCeWhVMUFkbURiWHpUQzBnbXN0WDN5Nlg5UVVOOUxsVGpjTElmZFF3c2lzd3lvbkFPMFc="
+        PASSWORD = "tttnAZTLcot45kYDPrRV"
 
         if ENCRYPTED_TOKEN == "__ENCRYPTED_TOKEN__":
             # Pas encore configuré
