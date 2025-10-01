@@ -584,24 +584,32 @@ class GitHubUploader:
         self.config = {
             "username": "fabyan09",
             "repository": "cosmic-defender-leaderboard",
-            "token": self._get_encoded_token(),
+            "token": self._get_secure_token(),
             "auto_upload": True,
             "configured": True
         }
 
-    def _get_encoded_token(self):
-        """Récupère le token encodé depuis le fichier de configuration"""
+    def _get_secure_token(self):
+        """Récupère le token chiffré de façon sécurisée"""
         try:
-            # Essayer d'importer le token depuis le fichier de configuration
+            from secure_token import SecureToken
+            st = SecureToken()
+            token = st.get_embedded_token()
+            if token:
+                return token
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Erreur lors du déchiffrement du token: {e}")
+
+        # Fallback: essayer l'ancien système (config_token.py)
+        try:
             from config_token import ENCODED_TOKEN
             if ENCODED_TOKEN and ENCODED_TOKEN != "REMPLACEZ_PAR_VOTRE_TOKEN_ENCODE":
                 return base64.b64decode(ENCODED_TOKEN.encode()).decode()
-        except ImportError:
-            print("Fichier config_token.py non trouve")
-        except Exception as e:
-            print(f"Erreur lors du decodage du token: {e}")
+        except:
+            pass
 
-        # Token de fallback (désactivé par défaut)
         return ""
 
     def is_configured(self):
@@ -896,7 +904,7 @@ class CosmicDefender:
             return str(uuid.uuid4())
 
     def save_web_score(self, name, score, wave, mode):
-        """Save score in web-compatible format"""
+        """Save score in web-compatible format to scores directory"""
         web_score = {
             "player_id": self.player_id,
             "name": name,
@@ -907,7 +915,22 @@ class CosmicDefender:
             "date": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
 
-        # Load existing web scores
+        # Create scores directory if it doesn't exist
+        scores_dir = "scores"
+        os.makedirs(scores_dir, exist_ok=True)
+
+        # Save individual score file (for GitHub Actions to pick up)
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        score_filename = os.path.join(scores_dir, f"score_{self.player_id}_{timestamp_str}.json")
+
+        try:
+            with open(score_filename, 'w', encoding='utf-8') as f:
+                json.dump(web_score, f, ensure_ascii=False, indent=2)
+            print(f"✓ Score saved to {score_filename}")
+        except Exception as e:
+            print(f"Error saving score file: {e}")
+
+        # Also maintain local web_scores.json for backwards compatibility
         web_scores = []
         try:
             if os.path.exists(self.web_scores_file):
@@ -919,7 +942,6 @@ class CosmicDefender:
         web_scores.append(web_score)
         web_scores.sort(key=lambda x: x["score"], reverse=True)
 
-        # Save updated web scores
         try:
             with open(self.web_scores_file, 'w', encoding='utf-8') as f:
                 json.dump(web_scores, f, ensure_ascii=False, indent=2)
@@ -929,40 +951,10 @@ class CosmicDefender:
         return web_score
 
     def export_for_github(self, single_score=None):
-        """Export scores in format ready for GitHub Pages"""
-        try:
-            # If a single score is provided, upload just that one (will be merged on GitHub)
-            if single_score:
-                print(f"📤 Uploading single score: {single_score['name']} - {single_score['score']}")
-                if self.github_uploader and self.github_uploader.is_configured():
-                    # Send as a dict with 'scores' array containing just this score
-                    upload_data = {
-                        "scores": [single_score]
-                    }
-                    self.github_uploader.upload_async(upload_data)
-                return single_score
-
-            # Otherwise, export all local scores for backup
-            if os.path.exists(self.web_scores_file):
-                with open(self.web_scores_file, 'r', encoding='utf-8') as f:
-                    scores = json.load(f)
-
-                # Create a more web-friendly format
-                export_data = {
-                    "last_updated": datetime.now().isoformat(),
-                    "total_scores": len(scores),
-                    "scores": scores[:50]  # Top 50 scores
-                }
-
-                with open("cosmic_defender_leaderboard.json", 'w', encoding='utf-8') as f:
-                    json.dump(export_data, f, ensure_ascii=False, indent=2)
-
-                print("Scores exported to cosmic_defender_leaderboard.json")
-
-                return export_data
-        except Exception as e:
-            print(f"Error exporting scores: {e}")
-            return None
+        """Export scores in format ready for GitHub Pages (deprecated - now using GitHub Actions)"""
+        # This method is kept for backwards compatibility but no longer uploads directly
+        # Scores are now saved to scores/ directory and uploaded via GitHub Actions
+        pass
 
     def spawn_enemy(self):
         x = random.randint(50, self.current_width - 50)
@@ -1109,8 +1101,16 @@ class CosmicDefender:
                     if event.key == pygame.K_RETURN and len(self.player_name.strip()) > 0:
                         self.save_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
                         web_score = self.save_web_score(self.player_name.strip(), self.score, self.wave, self.game_mode)
-                        # Upload only this score to GitHub (will be merged with existing scores)
-                        self.export_for_github(single_score=web_score)
+
+                        # Upload automatique vers GitHub
+                        if self.github_uploader and self.github_uploader.is_configured():
+                            print("\n" + "="*60)
+                            print("📤 Upload automatique du score vers GitHub...")
+                            self.github_uploader.upload_async({"scores": [web_score]})
+                            print("="*60 + "\n")
+                        else:
+                            print("\n⚠️  GitHub non configuré - score sauvegardé localement uniquement\n")
+
                         self.player_name = ""
                         self.name_input_active = False
                         self.state = GameState.LEADERBOARD

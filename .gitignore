@@ -1,12 +1,19 @@
-# Fichiers de scores et configuration locale
+# Fichiers de scores locaux (ne pas uploader)
 scores.json
 web_scores.json
 player_id.txt
 github_config.json
 
-# Script d'encodage (sécurité)
+# ANCIEN système de token (NE JAMAIS COMMIT!)
 encode_token.py
 config_token.py
+
+# NOUVEAU système: secure_token.py est SAFE à committer
+# Il contient le token CHIFFRÉ (pas en clair)
+# Ne PAS ajouter secure_token.py dans .gitignore
+
+# Scripts de configuration (peuvent être committés)
+# setup_github_token.py - safe à committer
 
 # Fichiers Python
 __pycache__/
