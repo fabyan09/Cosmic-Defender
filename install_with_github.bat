@@ -19,7 +19,7 @@ echo ✅ Python détecté avec succès !
 echo.
 
 echo Installation des dépendances (y compris GitHub)...
-pip install pygame==2.5.2 numpy==1.24.3 requests>=2.25.0
+pip install -r requirements.txt
 
 if %errorlevel% neq 0 (
     echo ❌ Erreur lors de l'installation des dépendances
