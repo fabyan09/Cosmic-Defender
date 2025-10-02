@@ -614,10 +614,10 @@ class GitHubUploader:
 
     def is_configured(self):
         """Check if GitHub integration is properly configured"""
-        return (self.config.get("configured", False) and
-                self.config.get("token", "") and
-                self.config.get("username", "") and
-                self.config.get("repository", "") and
+        # Vérifie que tous les champs nécessaires sont présents et que requests est disponible
+        return (bool(self.config.get("token", "")) and
+                bool(self.config.get("username", "")) and
+                bool(self.config.get("repository", "")) and
                 HAS_REQUESTS)
 
     def test_connection(self):
