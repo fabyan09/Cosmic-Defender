@@ -6,7 +6,7 @@ def install_requirements():
     """Installe automatiquement les dépendances requises."""
     print("🚀 Cosmic Defender - Installation automatique des dépendances...")
 
-    requirements = ["pygame==2.5.2", "numpy==1.24.3"]
+    requirements = ["pygame==2.5.2", "numpy==1.24.3", "requests", "cryptography"]
 
     for package in requirements:
         print(f"Installation de {package}...")
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # Importer et lancer le jeu
     try:
         # Code du jeu intégré
-        exec(open('cosmic_defender.py').read())
+        exec(open('cosmic_defender.py', encoding='utf-8').read())
     except FileNotFoundError:
         print("ERREUR: Fichier cosmic_defender.py introuvable !")
         input("Appuyez sur Entree pour quitter...")
