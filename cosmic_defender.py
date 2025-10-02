@@ -44,6 +44,7 @@ class GameState(Enum):
     GITHUB_CONFIG = 8
     PAUSED = 9
     RULES = 10
+    SETTINGS = 11
 
 class PowerUpType(Enum):
     RAPID_FIRE = 1
@@ -782,6 +783,7 @@ class CosmicDefender:
         self.enemies_per_wave = 10
         self.spawn_timer = 0
         self.spawn_cooldown = 1.0
+        self.enemies_killed = 0
 
         # Pause state
         self.previous_state = None
@@ -821,6 +823,11 @@ class CosmicDefender:
         # GitHub integration (before menu buttons)
         self.github_uploader = GitHubUploader() if HAS_REQUESTS else None
 
+        # Control settings
+        self.controls = self.load_controls()
+        self.waiting_for_key = None  # Track which control is being rebound
+        self.settings_buttons = []
+
         # Menu buttons (after GitHub uploader is initialized)
         self.menu_buttons = []
         self.create_menu_buttons()
@@ -829,14 +836,16 @@ class CosmicDefender:
         button_width = 300
         button_height = 50
         center_x = self.current_width // 2
-        start_y = self.current_height // 2 - 50
+        # Adjust start_y to be lower to avoid overlap with title
+        start_y = max(self.current_height // 2 - 20, 250)
 
         self.menu_buttons = [
             Button(center_x, start_y - 90, button_width, button_height, "CAMPAIGN MODE", self.font),
             Button(center_x, start_y - 30, button_width, button_height, "INFINITE MODE", self.font),
-            Button(center_x, start_y + 30, button_width, button_height, "RULES", self.font),
-            Button(center_x, start_y + 90, button_width, button_height, "LEADERBOARD", self.font),
-            Button(center_x, start_y + 150, button_width, button_height, "QUIT", self.font)
+            Button(center_x, start_y + 30, button_width, button_height, "SETTINGS", self.font),
+            Button(center_x, start_y + 90, button_width, button_height, "RULES", self.font),
+            Button(center_x, start_y + 150, button_width, button_height, "LEADERBOARD", self.font),
+            Button(center_x, start_y + 210, button_width, button_height, "QUIT", self.font)
         ]
 
     def toggle_fullscreen(self):
@@ -902,6 +911,32 @@ class CosmicDefender:
                 return player_id
         except:
             return str(uuid.uuid4())
+
+    def load_controls(self):
+        """Load control settings from file or return defaults"""
+        default_controls = {
+            "up": [pygame.K_w, pygame.K_UP],
+            "down": [pygame.K_s, pygame.K_DOWN],
+            "left": [pygame.K_a, pygame.K_LEFT],
+            "right": [pygame.K_d, pygame.K_RIGHT],
+            "shoot": [pygame.K_SPACE],
+            "pause": [pygame.K_ESCAPE]
+        }
+        try:
+            if os.path.exists("controls.json"):
+                with open("controls.json", 'r') as f:
+                    return json.load(f)
+        except:
+            pass
+        return default_controls
+
+    def save_controls(self):
+        """Save control settings to file"""
+        try:
+            with open("controls.json", 'w') as f:
+                json.dump(self.controls, f, indent=2)
+        except Exception as e:
+            print(f"Error saving controls: {e}")
 
     def save_web_score(self, name, score, wave, mode):
         """Save score in web-compatible format to scores directory"""
@@ -1086,7 +1121,7 @@ class CosmicDefender:
                         # Resume the game
                         self.state = self.previous_state
                         self.previous_state = None
-                    elif self.state in [GameState.LEADERBOARD, GameState.RULES]:
+                    elif self.state in [GameState.LEADERBOARD, GameState.RULES, GameState.SETTINGS]:
                         self.state = GameState.MENU
                     elif self.state in [GameState.GAME_OVER, GameState.VICTORY]:
                         self.state = GameState.MENU
@@ -1124,6 +1159,13 @@ class CosmicDefender:
                         self.player_name = ""
                         self.name_input_active = True
                         self.state = GameState.ENTER_NAME
+                elif self.state == GameState.SETTINGS:
+                    # Handle key rebinding if waiting for input
+                    if self.waiting_for_key:
+                        # Rebind the key
+                        self.controls[self.waiting_for_key] = [event.key]
+                        self.save_controls()
+                        self.waiting_for_key = None
 
         # Handle menu button clicks
         if self.state == GameState.MENU:
@@ -1134,13 +1176,49 @@ class CosmicDefender:
                         self.start_game("normal")
                     elif i == 1:  # Infinite Mode
                         self.start_game("infinite")
-                    elif i == 2:  # Rules
+                    elif i == 2:  # Settings
+                        self.state = GameState.SETTINGS
+                    elif i == 3:  # Rules
                         self.state = GameState.RULES
-                    elif i == 3:  # Leaderboard
+                    elif i == 4:  # Leaderboard
                         import webbrowser
                         webbrowser.open("https://fabyan09.github.io/cosmic-defender-leaderboard/")
-                    elif i == 4:  # Quit
+                    elif i == 5:  # Quit
                         self.running = False
+        # Handle pause menu button clicks
+        elif self.state == GameState.PAUSED:
+            for i, button in enumerate(self.pause_buttons):
+                button.update(mouse_pos, mouse_clicked)
+                if button.is_clicked:
+                    if i == 0:  # Resume
+                        self.state = self.previous_state
+                        self.previous_state = None
+                    elif i == 1:  # Main Menu
+                        self.state = GameState.MENU
+                        self.pause_buttons = []  # Reset pause buttons
+        # Handle settings button clicks
+        elif self.state == GameState.SETTINGS:
+            control_names = list(["up", "down", "left", "right", "shoot", "pause"])
+
+            # Handle button clicks
+            for i, button in enumerate(self.settings_buttons):
+                button.update(mouse_pos, mouse_clicked)
+                if button.is_clicked:
+                    if i < len(control_names):
+                        # Change control button clicked
+                        self.waiting_for_key = control_names[i]
+                    elif i == len(control_names):
+                        # Reset to defaults
+                        self.controls = {
+                            "up": [pygame.K_w, pygame.K_UP],
+                            "down": [pygame.K_s, pygame.K_DOWN],
+                            "left": [pygame.K_a, pygame.K_LEFT],
+                            "right": [pygame.K_d, pygame.K_RIGHT],
+                            "shoot": [pygame.K_SPACE],
+                            "pause": [pygame.K_ESCAPE]
+                        }
+                        self.save_controls()
+                        self.waiting_for_key = None
         else:
             # Update button hover states even if not clicked
             for button in self.menu_buttons:
@@ -1322,6 +1400,7 @@ class CosmicDefender:
                 if bullet.rect.colliderect(enemy.rect):
                     if enemy.take_damage(bullet.damage):
                         self.score += enemy.points
+                        self.enemies_killed += 1
                         self.create_explosion(enemy.x, enemy.y)
                         self.add_screen_shake(3, 0.1)  # Small shake for normal enemies
                         self.spawn_power_up(enemy.x, enemy.y)
@@ -1334,6 +1413,7 @@ class CosmicDefender:
             if not hit and self.giga_boss and bullet.rect.colliderect(self.giga_boss.rect):
                 if self.giga_boss.take_damage(bullet.damage):
                     self.score += self.giga_boss.points
+                    self.enemies_killed += 1
                     self.create_explosion(self.giga_boss.x, self.giga_boss.y, PURPLE, 20)
                     self.add_screen_shake(15, 0.4)  # Big shake for boss death
                     self.spawn_power_up(self.giga_boss.x, self.giga_boss.y)
@@ -1375,9 +1455,11 @@ class CosmicDefender:
                 self.boss_spawned_this_wave = True
             elif not self.giga_boss:  # Normal enemy spawning when no giga boss
                 self.spawn_timer += dt
+                # Increase max enemies on screen as waves progress in infinite mode
+                max_enemies = min(30, 15 + (self.wave // 2))
                 if (self.spawn_timer >= self.spawn_cooldown and
                     self.enemies_spawned < self.enemies_per_wave and
-                    len(self.enemies) < 15):
+                    len(self.enemies) < max_enemies):
                     self.spawn_enemy()
                     self.enemies_spawned += 1
                     self.spawn_timer = 0
@@ -1387,17 +1469,20 @@ class CosmicDefender:
                 self.wave += 1
                 self.enemies_spawned = 0
                 self.boss_spawned_this_wave = False
-                self.enemies_per_wave += 1  # Gradually increase enemies
-                self.spawn_cooldown = max(0.2, self.spawn_cooldown - 0.02)
+                # Increase difficulty more aggressively: +2 base + wave/5 for exponential growth
+                self.enemies_per_wave += 2 + (self.wave // 5)
+                self.spawn_cooldown = max(0.15, self.spawn_cooldown - 0.03)
                 # Change background every 10 waves
                 if self.wave % 10 == 0:
                     self.current_background = (self.current_background + 1) % len(self.background_colors)
         else:
             # Normal campaign mode
             self.spawn_timer += dt
+            # Increase max enemies on screen as waves progress
+            max_enemies = min(25, 15 + (self.wave // 2))
             if (self.spawn_timer >= self.spawn_cooldown and
                 self.enemies_spawned < self.enemies_per_wave and
-                len(self.enemies) < 15):
+                len(self.enemies) < max_enemies):
                 self.spawn_enemy()
                 self.enemies_spawned += 1
                 self.spawn_timer = 0
@@ -1405,8 +1490,9 @@ class CosmicDefender:
             if self.enemies_spawned >= self.enemies_per_wave and len(self.enemies) == 0:
                 self.wave += 1
                 self.enemies_spawned = 0
-                self.enemies_per_wave += 2
-                self.spawn_cooldown = max(0.3, self.spawn_cooldown - 0.05)
+                # Increase difficulty more: +3 base + wave/3 for good progression
+                self.enemies_per_wave += 3 + (self.wave // 3)
+                self.spawn_cooldown = max(0.25, self.spawn_cooldown - 0.06)
                 # Change background every 10 waves
                 if self.wave % 10 == 0:
                     self.current_background = (self.current_background + 1) % len(self.background_colors)
@@ -1748,7 +1834,7 @@ class CosmicDefender:
             f"Wave: {self.wave}",
             f"Health: {self.player.health}/{self.player.max_health}",
             f"Mode: {self.game_mode.upper()}",
-            f"Enemies Alive: {len(self.enemies)}",
+            f"Enemies Killed: {self.enemies_killed}",
         ]
 
         for stat in stats:
@@ -1776,10 +1862,25 @@ class CosmicDefender:
             self.screen.blit(control_text, (self.current_width//2 - control_text.get_width()//2, controls_y))
             controls_y += 30
 
-        # Resume instruction
-        resume_text = self.big_font.render("Press ESC to Resume", True, GREEN)
-        resume_rect = resume_text.get_rect(center=(self.current_width//2, self.current_height - 80))
-        self.screen.blit(resume_text, resume_rect)
+        # Create pause menu buttons if not created
+        if not self.pause_buttons:
+            button_width = 250
+            button_height = 50
+            center_x = self.current_width // 2
+            button_y = self.current_height - 150
+
+            self.pause_buttons = [
+                Button(center_x - 140, button_y, button_width, button_height, "RESUME (ESC)", self.font, color=GREEN),
+                Button(center_x + 140, button_y, button_width, button_height, "MAIN MENU", self.font, color=ORANGE)
+            ]
+
+        # Draw and update buttons
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = pygame.mouse.get_pressed()[0]
+
+        for button in self.pause_buttons:
+            button.update(mouse_pos, mouse_clicked)
+            button.draw(self.screen)
 
     def draw_enemy_preview(self, screen, x, y, enemy_type, size=30):
         """Draw a small preview of an enemy for the rules page - matches actual game sprites"""
@@ -1925,6 +2026,110 @@ class CosmicDefender:
                 self.screen.blit(ctrl_render, (50, powerups_y))
                 powerups_y += 25
 
+        # Back button
+        button_width = 250
+        button_height = 50
+        back_button = Button(
+            self.current_width//2,
+            self.current_height - 50,
+            button_width,
+            button_height,
+            "RETURN TO MENU",
+            self.font,
+            color=GREEN
+        )
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = pygame.mouse.get_pressed()[0]
+        back_button.update(mouse_pos, mouse_clicked)
+        back_button.draw(self.screen)
+
+        # Handle back button click
+        if back_button.is_clicked:
+            self.state = GameState.MENU
+
+    def draw_settings(self):
+        # Title
+        title = self.big_font.render("SETTINGS", True, CYAN)
+        title_rect = title.get_rect(center=(self.current_width//2, 60))
+        self.screen.blit(title, title_rect)
+
+        # Controls section
+        controls_y = 150
+        controls_title = self.font.render("CONTROLS", True, YELLOW)
+        self.screen.blit(controls_title, (self.current_width//2 - controls_title.get_width()//2, controls_y))
+
+        controls_y += 60
+        control_names = {
+            "up": "Move Up",
+            "down": "Move Down",
+            "left": "Move Left",
+            "right": "Move Right",
+            "shoot": "Shoot",
+            "pause": "Pause"
+        }
+
+        for action, name in control_names.items():
+            # Get key names
+            keys = self.controls[action]
+            key_names = []
+            for key in keys:
+                key_name = pygame.key.name(key).upper()
+                key_names.append(key_name)
+            keys_text = " / ".join(key_names)
+
+            # Draw action name
+            action_text = self.font.render(f"{name}:", True, WHITE)
+            self.screen.blit(action_text, (self.current_width//2 - 250, controls_y))
+
+            # Draw keys
+            if self.waiting_for_key == action:
+                keys_display = self.font.render("Press a key...", True, YELLOW)
+            else:
+                keys_display = self.font.render(keys_text, True, CYAN)
+            self.screen.blit(keys_display, (self.current_width//2 + 50, controls_y))
+
+            # Create button for rebinding
+            if not self.settings_buttons or len(self.settings_buttons) < len(control_names):
+                button_width = 150
+                button_height = 40
+                button = Button(
+                    self.current_width//2 + 300,
+                    controls_y + 20,
+                    button_width,
+                    button_height,
+                    "Change",
+                    self.small_font
+                )
+                self.settings_buttons.append(button)
+
+            controls_y += 60
+
+        # Draw buttons
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_clicked = pygame.mouse.get_pressed()[0]
+
+        for i, button in enumerate(self.settings_buttons[:len(control_names)]):
+            button.update(mouse_pos, mouse_clicked)
+            button.draw(self.screen)
+
+        # Reset to defaults button
+        reset_button_y = controls_y + 40
+        if len(self.settings_buttons) < len(control_names) + 1:
+            reset_btn = Button(
+                self.current_width//2,
+                reset_button_y,
+                250,
+                50,
+                "Reset to Defaults",
+                self.font,
+                color=ORANGE
+            )
+            self.settings_buttons.append(reset_btn)
+
+        if len(self.settings_buttons) > len(control_names):
+            self.settings_buttons[-1].update(mouse_pos, mouse_clicked)
+            self.settings_buttons[-1].draw(self.screen)
+
         # Back instruction
         back_text = self.font.render("Press ESC to return", True, GREEN)
         back_rect = back_text.get_rect(center=(self.current_width//2, self.current_height - 40))
@@ -1980,6 +2185,8 @@ class CosmicDefender:
                 self.draw_pause_menu()
             elif self.state == GameState.RULES:
                 self.draw_rules()
+            elif self.state == GameState.SETTINGS:
+                self.draw_settings()
             elif self.state == GameState.GAME_OVER:
                 self.draw_game_over()
             elif self.state == GameState.VICTORY:
