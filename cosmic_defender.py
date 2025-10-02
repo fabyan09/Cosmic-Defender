@@ -1597,7 +1597,8 @@ class CosmicDefender:
 
         # Instructions
         instructions = [
-            "WASD/Arrows: Move | SPACE/Click: Shoot | SHIFT: Dash | F11: Fullscreen",
+            " ",
+            " ",
             "Campaign Mode: Survive 10 waves to win!",
             "Infinite Mode: Endless waves with Giga Bosses every 10 waves!"
         ]
