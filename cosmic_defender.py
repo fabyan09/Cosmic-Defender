@@ -1642,7 +1642,11 @@ class CosmicDefender:
                         self.score += enemy.points
                         self.enemies_killed += 1
                         self.create_explosion(enemy.x, enemy.y)
-                        self.add_screen_shake(3, 0.1)  # Small shake for normal enemies
+                        # Different vibration for boss vs normal enemies
+                        if enemy.enemy_type == "boss":
+                            self.add_screen_shake(10, 0.3)  # Stronger shake for boss death
+                        else:
+                            self.add_screen_shake(3, 0.1)  # Small shake for normal enemies
                         self.spawn_power_up(enemy.x, enemy.y)
                         self.enemies.remove(enemy)
                     self.bullets.remove(bullet)
