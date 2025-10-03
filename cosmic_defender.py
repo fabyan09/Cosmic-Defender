@@ -152,18 +152,31 @@ class Enemy:
         self.shoot_cooldown = 2.0
         self.points = 10
 
+        # Load enemy images based on type
         if enemy_type == "tank":
             self.health = 3
             self.speed = 50
             self.size = 30
             self.color = (150, 0, 0)
             self.points = 25
+            self.image = pygame.image.load("assets/Enemies/Designs - Base/PNGs/Nairan - Frigate - Base.png")
+            self.image = pygame.transform.scale(self.image, (90, 90))  # +50%
+            self.max_health = 3
+            self.frames = None
+            self.destruction_frames = None
+            self.is_destroyed = False
         elif enemy_type == "fast":
             self.speed = 200
             self.size = 15
             self.color = (255, 100, 100)
             self.shoot_cooldown = 1.5
             self.points = 15
+            self.image = pygame.image.load("assets/Enemies/Designs - Base/PNGs/Nairan - Scout - Base.png")  # Corrigé
+            self.image = pygame.transform.scale(self.image, (60, 60))  # +50%
+            self.max_health = 1
+            self.frames = None
+            self.destruction_frames = None
+            self.is_destroyed = False
         elif enemy_type == "boss":
             self.health = 20
             self.speed = 30
@@ -171,13 +184,66 @@ class Enemy:
             self.color = (100, 0, 100)
             self.shoot_cooldown = 0.5
             self.points = 100
+            self.max_health = 20
+
+            # Load battlecruiser animation (9 frames)
+            battlecruiser_spritesheet = pygame.image.load("assets/Enemies/Weapons/PNGs/Nairan - Battlecruiser - Weapons.png")
+            sheet_width = battlecruiser_spritesheet.get_width()
+            frame_width = sheet_width // 9
+            frame_height = battlecruiser_spritesheet.get_height()
+            self.frames = []
+            for i in range(9):
+                frame = battlecruiser_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (150, 150))
+                self.frames.append(frame)
+            self.frame_index = 0
+            self.animation_timer = 0
+            self.animation_speed = 0.08
+
+            # Load destruction animation (18 frames)
+            destruction_spritesheet = pygame.image.load("assets/Enemies/Destruction/PNGs/Nairan - Battlecruiser  -  Destruction.png")
+            sheet_width = destruction_spritesheet.get_width()
+            frame_width = sheet_width // 18
+            frame_height = destruction_spritesheet.get_height()
+            self.destruction_frames = []
+            for i in range(18):
+                frame = destruction_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (150, 150))
+                self.destruction_frames.append(frame)
+            self.is_destroyed = False
+            self.destruction_frame_index = 0
+            self.destruction_animation_timer = 0
+            self.destruction_animation_speed = 0.05
+        else:  # basic/scout
+            self.image = pygame.image.load("assets/Enemies/Designs - Base/PNGs/Nairan - Fighter - Base.png")  # Corrigé
+            self.image = pygame.transform.scale(self.image, (60, 60))  # +50%
+            self.max_health = 1
+            self.frames = None
+            self.destruction_frames = None
+            self.is_destroyed = False
 
         self.rect = pygame.Rect(x-self.size//2, y-self.size//2, self.size, self.size)
 
     def update(self, dt, player_x, player_y, screen_height):
+        # If in destruction animation, just update animation
+        if self.is_destroyed:
+            self.destruction_animation_timer += dt
+            if self.destruction_animation_timer >= self.destruction_animation_speed:
+                self.destruction_animation_timer = 0
+                self.destruction_frame_index += 1
+                if self.destruction_frame_index >= 18:
+                    return False  # Animation finished, remove enemy
+            return True  # Keep enemy to show destruction animation
+
         if self.enemy_type == "boss":
             self.y += self.speed * dt * 0.5
             self.x += math.sin(self.y * 0.01) * 50 * dt
+
+            # Update animation for boss
+            self.animation_timer += dt
+            if self.animation_timer >= self.animation_speed:
+                self.animation_timer = 0
+                self.frame_index = (self.frame_index + 1) % 9
         else:
             angle = math.atan2(player_y - self.y, player_x - self.x)
             self.x += math.cos(angle) * self.speed * dt * 0.3
@@ -196,20 +262,54 @@ class Enemy:
 
     def take_damage(self, damage):
         self.health -= damage
-        return self.health <= 0
+        if self.health <= 0:
+            # Start destruction animation if available
+            if self.destruction_frames:
+                self.is_destroyed = True
+                return False  # Don't remove yet, play animation first
+            return True  # Remove immediately if no destruction animation
+        return False
 
     def draw(self, screen):
-        health_ratio = self.health / (3 if self.enemy_type == "tank" else 20 if self.enemy_type == "boss" else 1)
-        current_color = tuple(int(c * health_ratio) for c in self.color)
+        # Draw destruction animation if destroyed
+        if self.is_destroyed and self.destruction_frames:
+            if self.destruction_frame_index < len(self.destruction_frames):
+                current_frame = self.destruction_frames[self.destruction_frame_index]
+                image_rect = current_frame.get_rect(center=(int(self.x), int(self.y)))
+                screen.blit(current_frame, image_rect)
+            return
 
-        if self.enemy_type == "boss":
-            pygame.draw.ellipse(screen, current_color, self.rect)
-            pygame.draw.ellipse(screen, WHITE, self.rect, 3)
+        # Draw enemy image or animation
+        if self.frames:
+            # Draw animation for boss
+            current_frame = self.frames[self.frame_index]
+            image_rect = current_frame.get_rect(center=(int(self.x), int(self.y)))
+            screen.blit(current_frame, image_rect)
         else:
-            pygame.draw.rect(screen, current_color, self.rect)
-            pygame.draw.rect(screen, WHITE, self.rect, 2)
+            # Draw static image for other enemies
+            image_rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+            screen.blit(self.image, image_rect)
+
+        # Draw health bar for boss (not during destruction)
+        if self.enemy_type == "boss" and not self.is_destroyed:
+            bar_width = 80
+            bar_height = 6
+            bar_x = self.x - bar_width // 2
+            bar_y = self.y - self.size - 15
+
+            health_ratio = self.health / self.max_health
+            pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
+            pygame.draw.rect(screen, GREEN, (bar_x, bar_y, bar_width * health_ratio, bar_height))
+            pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
 
 class PowerUp:
+    # Class variable to store loaded animations
+    _animations_loaded = False
+    _shield_frames = []
+    _rapid_fire_frames = []
+    _laser_frames = []
+    _multi_shot_frames = []
+
     def __init__(self, x, y, power_type):
         self.x = x
         self.y = y
@@ -226,16 +326,90 @@ class PowerUp:
         }
         self.color = colors.get(power_type, WHITE)
 
+        # Load all animations once
+        if not PowerUp._animations_loaded:
+            # Load shield animation
+            shield_spritesheet = pygame.image.load("assets/Shield Generators/PNGs/Pickup Icon - Shield Generator - All around shield.png")
+            sheet_width = shield_spritesheet.get_width()
+            frame_width = sheet_width // 15  # 15 frames
+            frame_height = shield_spritesheet.get_height()
+            for i in range(15):
+                frame = shield_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (40, 40))  # Scale to powerup size
+                PowerUp._shield_frames.append(frame)
+
+            # Load rapid fire animation (auto cannons)
+            rapid_spritesheet = pygame.image.load("assets/Weapons/PNGs/Pickup Icon - Weapons - Auto Cannons.png")
+            sheet_width = rapid_spritesheet.get_width()
+            frame_width = sheet_width // 15
+            frame_height = rapid_spritesheet.get_height()
+            for i in range(15):
+                frame = rapid_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (40, 40))
+                PowerUp._rapid_fire_frames.append(frame)
+
+            # Load laser animation (big space gun)
+            laser_spritesheet = pygame.image.load("assets/Weapons/PNGs/Pickup Icon - Weapons - Big Space Gun 2000.png")
+            sheet_width = laser_spritesheet.get_width()
+            frame_width = sheet_width // 15
+            frame_height = laser_spritesheet.get_height()
+            for i in range(15):
+                frame = laser_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (40, 40))
+                PowerUp._laser_frames.append(frame)
+
+            # Load multi-shot animation (rocket)
+            multi_spritesheet = pygame.image.load("assets/Weapons/PNGs/Pickup Icon - Weapons - Rocket.png")
+            sheet_width = multi_spritesheet.get_width()
+            frame_width = sheet_width // 15
+            frame_height = multi_spritesheet.get_height()
+            for i in range(15):
+                frame = multi_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (40, 40))
+                PowerUp._multi_shot_frames.append(frame)
+
+            PowerUp._animations_loaded = True
+
+        self.frame_index = 0
+        self.animation_timer = 0
+        self.animation_speed = 0.05  # Time per frame
+
     def update(self, dt, screen_height):
         self.float_offset += dt * 3
         self.y += 50 * dt
         self.rect.center = (int(self.x), int(self.y + math.sin(self.float_offset) * 3))
+
+        # Update animation for all power-ups
+        self.animation_timer += dt
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.frame_index = (self.frame_index + 1) % 15
+
         return self.y < screen_height + 20
 
     def draw(self, screen):
         y_pos = int(self.y + math.sin(self.float_offset) * 3)
-        pygame.draw.circle(screen, self.color, (int(self.x), y_pos), self.size)
-        pygame.draw.circle(screen, WHITE, (int(self.x), y_pos), self.size, 2)
+
+        # Select the appropriate frame list based on power-up type
+        frames = None
+        if self.type == PowerUpType.SHIELD:
+            frames = PowerUp._shield_frames
+        elif self.type == PowerUpType.RAPID_FIRE:
+            frames = PowerUp._rapid_fire_frames
+        elif self.type == PowerUpType.LASER:
+            frames = PowerUp._laser_frames
+        elif self.type == PowerUpType.MULTI_SHOT:
+            frames = PowerUp._multi_shot_frames
+
+        if frames:
+            # Draw animated power-up
+            current_frame = frames[self.frame_index]
+            frame_rect = current_frame.get_rect(center=(int(self.x), y_pos))
+            screen.blit(current_frame, frame_rect)
+        else:
+            # Fallback to circles if no animation
+            pygame.draw.circle(screen, self.color, (int(self.x), y_pos), self.size)
+            pygame.draw.circle(screen, WHITE, (int(self.x), y_pos), self.size, 2)
 
 class Player:
     def __init__(self, x, y, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT):
@@ -244,7 +418,25 @@ class Player:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.speed = 300
-        self.size = 15
+
+        # Load ship image
+        self.image = pygame.image.load("assets/Main Ship - Bases/PNGs/Main Ship - Base - Full health.png")
+        self.image = pygame.transform.scale(self.image, (48, 48))  # Adjust size as needed
+        self.size = 24  # Half of image size for collision
+
+        # Load shield animation
+        shield_spritesheet = pygame.image.load("assets/Main Ship - Shields/PNGs/Main Ship - Shields - Round Shield.png")
+        self.shield_frames = []
+        frame_width = 64  # 768 / 12 frames
+        frame_height = 64
+        for i in range(12):
+            frame = shield_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+            frame = pygame.transform.scale(frame, (72, 72))  # Scale up
+            self.shield_frames.append(frame)
+        self.shield_frame_index = 0
+        self.shield_animation_timer = 0
+        self.shield_animation_speed = 0.05  # Time per frame
+
         self.health = 100
 
         # Trail system
@@ -349,6 +541,13 @@ class Player:
         self.rect.center = (int(self.x), int(self.y))
         self.shoot_timer += dt
 
+        # Update shield animation
+        if self.shield > 0:
+            self.shield_animation_timer += dt
+            if self.shield_animation_timer >= self.shield_animation_speed:
+                self.shield_animation_timer = 0
+                self.shield_frame_index = (self.shield_frame_index + 1) % 12
+
         # Update trail
         self.trail_timer += dt
         if is_moving and self.trail_timer >= self.trail_spawn_rate:
@@ -436,8 +635,11 @@ class Player:
             if trail_size > 0:
                 pygame.draw.circle(screen, trail_color, (int(particle['x']), int(particle['y'])), trail_size)
 
+        # Draw shield animation if active
         if self.shield > 0:
-            pygame.draw.circle(screen, CYAN, (int(self.x), int(self.y)), self.size + 5, 2)
+            current_frame = self.shield_frames[self.shield_frame_index]
+            shield_rect = current_frame.get_rect(center=(int(self.x), int(self.y)))
+            screen.blit(current_frame, shield_rect)
 
         color = GREEN
         if self.rapid_fire_timer > 0:
@@ -447,13 +649,9 @@ class Player:
         elif self.laser_timer > 0:
             color = PURPLE
 
-        points = [
-            (self.x, self.y - self.size),
-            (self.x - self.size, self.y + self.size),
-            (self.x + self.size, self.y + self.size)
-        ]
-        pygame.draw.polygon(screen, color, points)
-        pygame.draw.polygon(screen, WHITE, points, 2)
+        # Draw ship image
+        image_rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+        screen.blit(self.image, image_rect)
 
         # Draw dash cooldown bar
         if self.dash_timer > 0:
@@ -487,12 +685,51 @@ class GigaBoss:
         self.points = 500 + (wave // 10) * 100
         self.rect = pygame.Rect(x-self.size//2, y-self.size//2, self.size, self.size)
 
+        # Load dreadnought animation (34 frames)
+        dreadnought_spritesheet = pygame.image.load("assets/Enemies/Weapons/PNGs/Nairan - Dreadnought - Weapons.png")
+        sheet_width = dreadnought_spritesheet.get_width()
+        frame_width = sheet_width // 34
+        frame_height = dreadnought_spritesheet.get_height()
+        self.frames = []
+        for i in range(34):
+            frame = dreadnought_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+            frame = pygame.transform.scale(frame, (240, 240))  # +50% from 160
+            self.frames.append(frame)
+        self.frame_index = 0
+        self.animation_timer = 0
+        self.animation_speed = 0.05
+
+        # Load destruction animation (18 frames)
+        destruction_spritesheet = pygame.image.load("assets/Enemies/Destruction/PNGs/Nairan - Dreadnought -  Destruction.png")
+        sheet_width = destruction_spritesheet.get_width()
+        frame_width = sheet_width // 18
+        frame_height = destruction_spritesheet.get_height()
+        self.destruction_frames = []
+        for i in range(18):
+            frame = destruction_spritesheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+            frame = pygame.transform.scale(frame, (240, 240))
+            self.destruction_frames.append(frame)
+        self.is_destroyed = False
+        self.destruction_frame_index = 0
+        self.destruction_animation_timer = 0
+        self.destruction_animation_speed = 0.05
+
         # Movement pattern
         self.center_x = x
         self.movement_timer = 0
         self.direction = 1
 
     def update(self, dt, player_x, player_y, screen_width, screen_height):
+        # If in destruction animation, just update animation
+        if self.is_destroyed:
+            self.destruction_animation_timer += dt
+            if self.destruction_animation_timer >= self.destruction_animation_speed:
+                self.destruction_animation_timer = 0
+                self.destruction_frame_index += 1
+                if self.destruction_frame_index >= 18:
+                    return False  # Animation finished, remove boss
+            return True  # Keep boss to show destruction animation
+
         # Movement pattern - side to side
         self.movement_timer += dt
         self.x = self.center_x + math.sin(self.movement_timer * 0.5) * 200
@@ -502,6 +739,12 @@ class GigaBoss:
         self.y += self.speed * dt * 0.3
 
         self.rect.center = (int(self.x), int(self.y))
+
+        # Update animation
+        self.animation_timer += dt
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.frame_index = (self.frame_index + 1) % 34
 
         # Pattern timing
         self.pattern_timer += dt
@@ -546,38 +789,35 @@ class GigaBoss:
 
     def take_damage(self, damage):
         self.health -= damage
-        return self.health <= 0
+        if self.health <= 0:
+            self.is_destroyed = True
+            return False  # Don't remove yet, play animation first
+        return False
 
     def draw(self, screen):
-        # Health bar
+        # Draw destruction animation if destroyed
+        if self.is_destroyed:
+            if self.destruction_frame_index < len(self.destruction_frames):
+                current_frame = self.destruction_frames[self.destruction_frame_index]
+                image_rect = current_frame.get_rect(center=(int(self.x), int(self.y)))
+                screen.blit(current_frame, image_rect)
+            return
+
+        # Draw dreadnought animation
+        current_frame = self.frames[self.frame_index]
+        image_rect = current_frame.get_rect(center=(int(self.x), int(self.y)))
+        screen.blit(current_frame, image_rect)
+
+        # Health bar (not during destruction)
         bar_width = self.size * 2
         bar_height = 8
         bar_x = self.x - bar_width // 2
-        bar_y = self.y - self.size // 2 - 20
+        bar_y = self.y - self.size - 40  # Adjusted for larger sprite
 
         health_ratio = self.health / self.max_health
         pygame.draw.rect(screen, RED, (bar_x, bar_y, bar_width, bar_height))
         pygame.draw.rect(screen, GREEN, (bar_x, bar_y, bar_width * health_ratio, bar_height))
         pygame.draw.rect(screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
-
-        # Boss body
-        current_color = tuple(int(c * (0.5 + health_ratio * 0.5)) for c in self.color)
-
-        # Main body
-        pygame.draw.ellipse(screen, current_color, self.rect)
-        pygame.draw.ellipse(screen, WHITE, self.rect, 4)
-
-        # Add spikes/details
-        for i in range(8):
-            angle = (i / 8) * 2 * math.pi + self.pattern_timer
-            spike_x = self.x + math.cos(angle) * (self.size // 2 - 10)
-            spike_y = self.y + math.sin(angle) * (self.size // 2 - 10)
-            pygame.draw.circle(screen, YELLOW, (int(spike_x), int(spike_y)), 5)
-
-        # Eyes
-        eye_offset = 15
-        pygame.draw.circle(screen, RED, (int(self.x - eye_offset), int(self.y - 10)), 8)
-        pygame.draw.circle(screen, RED, (int(self.x + eye_offset), int(self.y - 10)), 8)
 
 class GitHubUploader:
     def __init__(self):
