@@ -1638,7 +1638,12 @@ class CosmicDefender:
             # Check collision with regular enemies
             for enemy in self.enemies[:]:
                 if bullet.rect.colliderect(enemy.rect):
+                    # Check if enemy was killed by this damage
+                    enemy_was_alive = enemy.health > 0
+                    enemy_will_die = enemy.health <= bullet.damage
+
                     if enemy.take_damage(bullet.damage):
+                        # Enemy removed immediately (no destruction animation)
                         self.score += enemy.points
                         self.enemies_killed += 1
                         self.create_explosion(enemy.x, enemy.y)
@@ -1649,19 +1654,44 @@ class CosmicDefender:
                             self.add_screen_shake(3, 0.1)  # Small shake for normal enemies
                         self.spawn_power_up(enemy.x, enemy.y)
                         self.enemies.remove(enemy)
+                    elif enemy_was_alive and enemy_will_die:
+                        # Enemy just died but has destruction animation
+                        self.score += enemy.points
+                        self.enemies_killed += 1
+                        self.create_explosion(enemy.x, enemy.y)
+                        # Different vibration for boss vs normal enemies
+                        if enemy.enemy_type == "boss":
+                            self.add_screen_shake(10, 0.3)  # Stronger shake for boss death
+                        else:
+                            self.add_screen_shake(3, 0.1)  # Small shake for normal enemies
+                        self.spawn_power_up(enemy.x, enemy.y)
+                        # Don't remove enemy yet, let animation play
                     self.bullets.remove(bullet)
                     hit = True
                     break
 
             # Check collision with giga boss
             if not hit and self.giga_boss and bullet.rect.colliderect(self.giga_boss.rect):
+                # Check if gigaboss was killed by this damage
+                gigaboss_was_alive = self.giga_boss.health > 0
+                gigaboss_will_die = self.giga_boss.health <= bullet.damage
+
                 if self.giga_boss.take_damage(bullet.damage):
+                    # This should never happen for gigaboss as it always has destruction animation
                     self.score += self.giga_boss.points
                     self.enemies_killed += 1
                     self.create_explosion(self.giga_boss.x, self.giga_boss.y, PURPLE, 20)
                     self.add_screen_shake(15, 0.4)  # Big shake for boss death
                     self.spawn_power_up(self.giga_boss.x, self.giga_boss.y)
                     self.giga_boss = None
+                elif gigaboss_was_alive and gigaboss_will_die:
+                    # Gigaboss just died but has destruction animation
+                    self.score += self.giga_boss.points
+                    self.enemies_killed += 1
+                    self.create_explosion(self.giga_boss.x, self.giga_boss.y, PURPLE, 20)
+                    self.add_screen_shake(15, 0.4)  # Big shake for boss death
+                    self.spawn_power_up(self.giga_boss.x, self.giga_boss.y)
+                    # Don't set giga_boss to None yet, let animation play
                 self.bullets.remove(bullet)
 
         for bullet in self.enemy_bullets[:]:
@@ -2128,41 +2158,69 @@ class CosmicDefender:
             button.draw(self.screen)
 
     def draw_enemy_preview(self, screen, x, y, enemy_type, size=30):
-        """Draw a small preview of an enemy for the rules page - matches actual game sprites"""
-        rect = pygame.Rect(x - size//2, y - size//2, size, size)
-
-        if enemy_type == "normal":
-            # Normal enemy - red square (from Enemy.draw())
-            color = RED
-            pygame.draw.rect(screen, color, rect)
-            pygame.draw.rect(screen, WHITE, rect, 2)
-        elif enemy_type == "tank":
-            # Tank enemy - dark red square (from Enemy.draw())
-            color = (150, 0, 0)
-            pygame.draw.rect(screen, color, rect)
-            pygame.draw.rect(screen, WHITE, rect, 2)
-        elif enemy_type == "fast":
-            # Fast enemy - pink square (from Enemy.draw())
-            color = (255, 100, 100)
-            pygame.draw.rect(screen, color, rect)
-            pygame.draw.rect(screen, WHITE, rect, 2)
-        elif enemy_type == "boss":
-            # Boss enemy - purple ellipse (from Enemy.draw())
-            color = (100, 0, 100)
-            pygame.draw.ellipse(screen, color, rect)
-            pygame.draw.ellipse(screen, WHITE, rect, 3)
-        elif enemy_type == "gigaboss":
-            # Giga Boss - larger purple ellipse with spikes (from GigaBoss.draw())
-            color = (150, 0, 150)
-            # Main body
-            pygame.draw.ellipse(screen, color, rect)
-            pygame.draw.ellipse(screen, WHITE, rect, 3)
-            # Add spikes
-            for i in range(8):
-                angle = (i / 8) * 2 * math.pi
-                spike_x = rect.centerx + math.cos(angle) * (size // 2 + 5)
-                spike_y = rect.centery + math.sin(angle) * (size // 2 + 5)
-                pygame.draw.line(screen, color, rect.center, (spike_x, spike_y), 2)
+        """Draw a small preview of an enemy for the rules page using actual game assets"""
+        try:
+            if enemy_type == "normal":
+                # Normal enemy - fighter ship
+                image = pygame.image.load("assets/Enemies/Designs - Base/PNGs/Nairan - Fighter - Base.png")
+                image = pygame.transform.scale(image, (size, size))
+                screen.blit(image, (x - size//2, y - size//2))
+            elif enemy_type == "tank":
+                # Tank enemy - frigate
+                image = pygame.image.load("assets/Enemies/Designs - Base/PNGs/Nairan - Frigate - Base.png")
+                image = pygame.transform.scale(image, (size, size))
+                screen.blit(image, (x - size//2, y - size//2))
+            elif enemy_type == "fast":
+                # Fast enemy - scout
+                image = pygame.image.load("assets/Enemies/Designs - Base/PNGs/Nairan - Scout - Base.png")
+                image = pygame.transform.scale(image, (size, size))
+                screen.blit(image, (x - size//2, y - size//2))
+            elif enemy_type == "boss":
+                # Boss enemy - battlecruiser (first frame)
+                battlecruiser_spritesheet = pygame.image.load("assets/Enemies/Weapons/PNGs/Nairan - Battlecruiser - Weapons.png")
+                sheet_width = battlecruiser_spritesheet.get_width()
+                frame_width = sheet_width // 9
+                frame_height = battlecruiser_spritesheet.get_height()
+                frame = battlecruiser_spritesheet.subsurface(pygame.Rect(0, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (size, size))
+                screen.blit(frame, (x - size//2, y - size//2))
+            elif enemy_type == "gigaboss":
+                # Giga Boss - dreadnought (first frame)
+                dreadnought_spritesheet = pygame.image.load("assets/Enemies/Weapons/PNGs/Nairan - Dreadnought - Weapons.png")
+                sheet_width = dreadnought_spritesheet.get_width()
+                frame_width = sheet_width // 34
+                frame_height = dreadnought_spritesheet.get_height()
+                frame = dreadnought_spritesheet.subsurface(pygame.Rect(0, 0, frame_width, frame_height))
+                frame = pygame.transform.scale(frame, (size, size))
+                screen.blit(frame, (x - size//2, y - size//2))
+        except:
+            # Fallback to simple shapes if assets fail to load
+            rect = pygame.Rect(x - size//2, y - size//2, size, size)
+            if enemy_type == "normal":
+                color = RED
+                pygame.draw.rect(screen, color, rect)
+                pygame.draw.rect(screen, WHITE, rect, 2)
+            elif enemy_type == "tank":
+                color = (150, 0, 0)
+                pygame.draw.rect(screen, color, rect)
+                pygame.draw.rect(screen, WHITE, rect, 2)
+            elif enemy_type == "fast":
+                color = (255, 100, 100)
+                pygame.draw.rect(screen, color, rect)
+                pygame.draw.rect(screen, WHITE, rect, 2)
+            elif enemy_type == "boss":
+                color = (100, 0, 100)
+                pygame.draw.ellipse(screen, color, rect)
+                pygame.draw.ellipse(screen, WHITE, rect, 3)
+            elif enemy_type == "gigaboss":
+                color = (150, 0, 150)
+                pygame.draw.ellipse(screen, color, rect)
+                pygame.draw.ellipse(screen, WHITE, rect, 3)
+                for i in range(8):
+                    angle = (i / 8) * 2 * math.pi
+                    spike_x = rect.centerx + math.cos(angle) * (size // 2 + 5)
+                    spike_y = rect.centery + math.sin(angle) * (size // 2 + 5)
+                    pygame.draw.line(screen, color, rect.center, (spike_x, spike_y), 2)
 
     def draw_rules(self):
         # Title
@@ -2184,69 +2242,69 @@ class CosmicDefender:
         enemy_data = [
             {
                 "type": "normal",
-                "name": "SCOUT",
+                "name": "FIGHTER",
                 "health": "1 HP",
-                "speed": "Medium",
+                "speed": "Medium (100)",
                 "points": "10",
-                "desc": "Basic enemy, moves slowly"
+                "desc": "Standard Nairan fighter - shoots every 2s"
             },
             {
                 "type": "fast",
-                "name": "INTERCEPTOR",
+                "name": "SCOUT",
                 "health": "1 HP",
-                "speed": "Fast",
+                "speed": "Fast (200)",
                 "points": "15",
-                "desc": "Quick and agile"
+                "desc": "Quick Nairan interceptor - shoots every 1.5s"
             },
             {
                 "type": "tank",
-                "name": "DESTROYER",
+                "name": "FRIGATE",
                 "health": "3 HP",
-                "speed": "Slow",
+                "speed": "Slow (50)",
                 "points": "25",
-                "desc": "Armored and durable"
+                "desc": "Heavily armored Nairan warship"
             },
             {
                 "type": "boss",
-                "name": "COMMANDER",
+                "name": "BATTLECRUISER",
                 "health": "20 HP",
-                "speed": "Medium",
+                "speed": "Medium (30)",
                 "points": "100",
-                "desc": "Fires rapidly, zigzag pattern"
+                "desc": "Animated Nairan capital ship - rapid fire (0.5s)"
             },
             {
                 "type": "gigaboss",
-                "name": "TITAN",
+                "name": "DREADNOUGHT",
                 "health": "50+ HP",
-                "speed": "Slow",
+                "speed": "Slow (20)",
                 "points": "500+",
-                "desc": "Wave 10, 20, 30... Massive threat!"
+                "desc": "Massive Nairan flagship - appears every 10 waves"
             }
         ]
 
         for i, enemy in enumerate(enemy_data):
-            y_pos = enemies_y + i * 80
+            y_pos = enemies_y + i * 90
 
-            # Draw enemy preview
-            self.draw_enemy_preview(self.screen, 80, y_pos + 15, enemy["type"], 30)
+            # Draw enemy preview - larger size
+            self.draw_enemy_preview(self.screen, 90, y_pos + 20, enemy["type"], 50)
 
             # Enemy name
             name_text = self.font.render(enemy["name"], True, CYAN)
-            self.screen.blit(name_text, (130, y_pos - 5))
+            self.screen.blit(name_text, (150, y_pos - 5))
 
             # Stats
             stats_text = self.small_font.render(
                 f"HP: {enemy['health']}  |  Speed: {enemy['speed']}  |  Points: {enemy['points']}",
                 True, WHITE
             )
-            self.screen.blit(stats_text, (130, y_pos + 25))
+            self.screen.blit(stats_text, (150, y_pos + 25))
 
             # Description
             desc_text = self.small_font.render(enemy["desc"], True, (180, 180, 180))
-            self.screen.blit(desc_text, (130, y_pos + 48))
+            self.screen.blit(desc_text, (150, y_pos + 48))
 
         # Power-ups section
-        powerups_y = enemies_y + len(enemy_data) * 80 + 20
+        powerups_y = enemies_y + len(enemy_data) * 90 + 20
         if powerups_y < self.current_height - 180:
             powerups_title = self.font.render("POWER-UPS", True, YELLOW)
             self.screen.blit(powerups_title, (50, powerups_y))
